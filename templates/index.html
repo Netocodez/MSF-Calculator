@@ -17,10 +17,10 @@
             <input type="date" id="startDate" name="startDate">-->
             <br>
             <label for="endDate">Select Reporting Period:</label>
-            <input type="date" id="endDate" name="endDate">
+            <input type="month" id="endDate" name="endDate">
         </div>
         
-        <h2>Select ART Line List</h2>
+        <h2>Select ART Line List (Excel File Required)</h2>
         <input type="file" id="fileInput" accept=".xlsx,.xls" />
         <div id="uploadMessage"></div>
 
@@ -37,6 +37,12 @@
     </div>
 
     <script>
+        const today = new Date();
+        today.setMonth(today.getMonth() - 1); // Go to last month
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0'); // Add leading zero
+        document.getElementById('endDate').value = `${year}-${month}`;
+
         $(document).ready(function () {
             $("#fetchData").click(function () {
                 const fileInput = $("#fileInput")[0];

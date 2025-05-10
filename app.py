@@ -94,6 +94,10 @@ def fetch_data():
         labels2 = ['<15', '>=15']
 
         #df = pd.read_excel("df2.xlsx", sheet_name=0)
+        # Extract unique facility names as a list
+        unique_facilities = df['FacilityName'].unique()
+        facilities_text = ', '.join(unique_facilities)
+        print(facilities_text)
         
         #Convert Date Objects to Date using dateutil
         dfDates = ['DateConfirmedHIV+', 'ARTStartDate', 'Pharmacy_LastPickupdate', 'Pharmacy_LastPickupdate_PreviousQuarter', 'DateofCurrentViralLoad', 'DateResultReceivedFacility', 'LastDateOfSampleCollection', 'Outcomes_Date', 'IIT_Date', 'DOB', 'Date_Transfered_In', 'DateofFirstTLD_Pickup', 'EstimatedNextAppointmentPharmacy', 'Next_Ap_by_careCard', 'IPT_Screening_Date', 'First_TPT_Pickupdate', 'Last_TPT_Pickupdate', 'Current_TPT_Received', 'Date_of_TPT_Outcome', 'DateofCurrent_TBStatus', 'TB_Treatment_Start_Date', 'TB_Treatment_Stop_Date', 'Date_Enrolled_Into_OTZ', 'Date_Enrolled_Into_OTZ_Plus', 'PBS_Capture_Date', 'Date_Generated', 'PBS_Recapture_Date']
@@ -500,70 +504,19 @@ def fetch_data():
         # Display the modified summary
         VLTargeted_Sup
         
-        
-        with pd.ExcelWriter('ART MSF SUMMARY.xlsx', engine="xlsxwriter") as writer:
-
-            dataframes = {
-                "ART2Summary": ART2Summary,
-                "ART3Summary": ART3Summary,
-                "ART3aSummary": ART3aSummary,
-                "ART3bSummary": ART3bSummary,
-                "ART3cSummary": ART3cSummary,
-                "ART5summary": ART5summary,
-                "VLRoutine": VLRoutine,
-                "VLTargeted": VLTargeted,
-                "VLRoutine_Sup": VLRoutine_Sup,
-                "VLTargeted_Sup": VLTargeted_Sup
-            }
-
-            for sheet_name, df in dataframes.items():
-                workbook = writer.book
-
-                # Flatten MultiIndex columns if present
-                if isinstance(df.columns, pd.MultiIndex):
-                    df.columns = [' | '.join(map(str, col)).strip() for col in df.columns.values]
-
-                # Write dataframe including index
-                df.to_excel(writer, sheet_name=sheet_name, startrow=2, header=False, index=True)
-                worksheet = writer.sheets[sheet_name]
-
-                # Header formatting
-                header_format = workbook.add_format({
-                    "bold": True,
-                    "text_wrap": True,
-                    "valign": "bottom",
-                    "align": "center",
-                    "fg_color": "#D7E4BC",
-                    "border": 1,
-                    "font_size": 10,
-                    "shrink": True
-                })
-
-                # Write index name in first column header if present
-                if df.index.name:
-                    worksheet.write(1, 0, df.index.name, header_format)
-                else:
-                    worksheet.write(1, 0, "Index", header_format)
-
-                # Write column headers, starting from second column (col=1)
-                for col_num, value in enumerate(df.columns.values):
-                    worksheet.write(1, col_num + 1, value, header_format)
-        
-        
-        # Load Excel source file
-        xls = pd.ExcelFile("ART MSF SUMMARY.xlsx")
-
-        # Define the original sheet sequence
-        sheet_sequence = [
-            "ART2Summary", "ART3Summary", "ART3aSummary", "ART3bSummary",
-            "ART3cSummary", "ART5summary", "VLRoutine", "VLTargeted",
-            "VLRoutine_Sup", "VLTargeted_Sup"
-        ]
-
-        # Create new workbook and worksheet
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "ART MSF"
+        # Define the dataframes
+        dataframes = {
+            "ART2Summary": ART2Summary,
+            "ART3Summary": ART3Summary,
+            "ART3aSummary": ART3aSummary,
+            "ART3bSummary": ART3bSummary,
+            "ART3cSummary": ART3cSummary,
+            "ART5summary": ART5summary,
+            "VLRoutine": VLRoutine,
+            "VLTargeted": VLTargeted,
+            "VLRoutine_Sup": VLRoutine_Sup,
+            "VLTargeted_Sup": VLTargeted_Sup
+        }
 
         # Define a title mapping for each sheet
         sheet_titles = {
@@ -572,54 +525,62 @@ def fetch_data():
             "ART3aSummary": "ART 3 Regimen Lines",
             "ART3bSummary": "ART 3 Multi-Month Dispensing",
             "ART3cSummary": "ART 3 DSD Model",
-            "ART5summary": "ART 5: Number of PLHIV on ART (who were on ART at the beginning of the reporting period or initiated treatment during the reporting period) and had no clinical contact since their last expected contact.",
+            "ART5summary": "ART 5: Number of PLHIV on ART who had no clinical contact since their last expected contact.",
             "VLRoutine": "ART 6: Number of PLHIV on ART for at least 6 months with a VL test result during the month - Routine",
             "VLTargeted": "ART 6: Number of PLHIV on ART for at least 6 months with a VL test result during the month - Targeted",
             "VLRoutine_Sup": "ART 7: Number of PLHIV on ART (for at least 6 months) who have virologic suppression (<1000 copies/ml) during the month - Routine",
             "VLTargeted_Sup": "ART 7: Number of PLHIV on ART (for at least 6 months) who have virologic suppression (<1000 copies/ml) during the month - Targeted"
         }
 
-        # Function to add section title and DataFrame to worksheet with style
+        # Create a new workbook and add a worksheet
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "ART MSF"
+
         def append_df_with_title(ws, title, df, start_row):
+            
+            # Flatten MultiIndex columns if present
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = [' | '.join(map(str, col)).strip() for col in df.columns.values]
+            
             # Merge the title across all columns
-            total_cols = len(df.columns) + 1  # +1 for index
+            total_cols = len(df.columns) + 2  # +1 for index, +1 for data columns
             ws.merge_cells(start_row=start_row, start_column=1, end_row=start_row, end_column=total_cols)
             title_cell = ws.cell(row=start_row, column=1)
             title_cell.value = title
-            title_cell.font = Font(bold=True, size=11)
+            title_cell.font = Font(bold=True, size=12)
             title_cell.alignment = Alignment(horizontal='center', vertical='center')
             
             start_row += 1
-
-            # Use the first row of the dataframe as the header
-            df.columns = df.iloc[0]  # Set the first row as the header
-            df = df.drop(index=0)  # Drop the first row since it's now used as the header
-
-            # Add header row
-            for col_num, value in enumerate(df.columns.values):
+            
+            # Add header row (including the index column)
+            header = ['Category'] + list(df.columns)  # Add 'Index' as the first column header
+            for col_num, value in enumerate(header):
                 cell = ws.cell(row=start_row, column=col_num + 1)
                 cell.value = value
                 cell.font = Font(bold=True)
                 cell.alignment = Alignment(horizontal='center', vertical='center')
                 cell.fill = PatternFill(start_color="D7E4BC", end_color="D7E4BC", fill_type="solid")
             
-            # Add dataframe content
-            for row_num, row in enumerate(dataframe_to_rows(df, index=False, header=False), start=start_row + 1):
+            # Add dataframe content (including the index)
+            for row_num, (index, row) in enumerate(df.iterrows(), start=start_row + 1):
+                ws.cell(row=row_num, column=1).value = index  # Add index as the first column
                 for col_num, value in enumerate(row):
-                    cell = ws.cell(row=row_num, column=col_num + 1)
+                    cell = ws.cell(row=row_num, column=col_num + 2)  # Data starts from column 2
                     cell.value = value
-
+            
             # Alternating row color
             for row_num in range(start_row + 1, start_row + len(df) + 1):
                 if row_num % 2 == 0:
                     for col_num in range(1, total_cols + 1):
                         cell = ws.cell(row=row_num, column=col_num)
                         cell.fill = PatternFill(start_color="F9F9F9", end_color="F9F9F9", fill_type="solid")
-
+            
             return start_row + len(df) + 2
 
+
         # Add general title at the top of the sheet
-        general_title = f"ART Monthly Summary Form As At {formatted_period}"
+        general_title = f"{facilities_text} ART Monthly Summary Form As At {formatted_period}"
         ws.merge_cells('A1:Q1')  # Merge cells from A1 to Q1 (adjust columns as needed)
         # Set the general title in the merged cell
         general_title_cell = ws.cell(row=1, column=1)
@@ -629,17 +590,13 @@ def fetch_data():
         general_title_cell.fill = PatternFill(start_color="F9F9F9", end_color="F9F9F9", fill_type="solid")
         ws.freeze_panes = 'A2'
 
-
-        #worksheet.merge_range(0, 0, 0, len(dataframe.columns) - 1, title_text, title_format)
-
-        # Merge each sheet into the single worksheet
+        # Process and append each sheet from dataframes
         start_row = 2
-        for sheet_name in sheet_sequence:
-            df = xls.parse(sheet_name)
+        for sheet_name, df in dataframes.items():
             title = sheet_titles.get(sheet_name, sheet_name)
             start_row = append_df_with_title(ws, f">>> {title}", df, start_row)
 
-        # Set column widths
+        # Set column widths dynamically
         for col in range(1, ws.max_column + 1):
             max_length = 0
             column = chr(64 + col)  # Get the column letter (A, B, C, etc.)
@@ -647,8 +604,11 @@ def fetch_data():
             # Special case: set fixed width for the first 5 columns (adjust as necessary)
             if col <= 5:
                 adjusted_width = 10  # Set a fixed width for the first 5 columns
+
             if col <= 1:
                 adjusted_width = 45  # Set a fixed width for the first 5 columns
+            #elif col <= 1:
+                #adjusted_width = 45  # Set a fixed width for the first column
             else:
                 for row in ws.iter_rows(min_col=col, max_col=col):
                     for cell in row:
@@ -662,8 +622,9 @@ def fetch_data():
         # Remove gridlines (this is done by hiding the gridlines in the sheet view)
         ws.sheet_view.showGridLines = False
 
-        # Save the merged file
+        # Save the workbook
         wb.save(f"ART MSF SUMMARY AS AT {formatted_period}.xlsx")
+
 
         #return successful response
         return jsonify({"message": "Data fetched and analyzed successfully!", "download_url": "/download"}), 200
