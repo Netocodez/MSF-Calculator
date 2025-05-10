@@ -1,0 +1,690 @@
+from flask import Flask, render_template, request, jsonify, send_file
+
+import pandas as pd
+import numpy as np
+import os
+import logging
+from datetime import datetime
+from dateutil import parser
+import xlsxwriter
+from openpyxl import Workbook
+from openpyxl.utils.dataframe import dataframe_to_rows
+from openpyxl.styles import Font, Alignment, PatternFill
+
+
+#Period = pd.to_datetime('2025-04-30').to_period('M')
+# Convert to proper month-year format
+formatted_period = None
+
+app = Flask(__name__)
+
+UPLOAD_FOLDER = 'uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+
+#function for cleaning and formating dates 
+def parse_date(date):
+
+    if pd.isna(date):  # Handle NaN values
+        return pd.NaT
+    
+    if isinstance(date, pd.Timestamp):  # If already a datetime object
+        return date.date()
+    
+    if isinstance(date, (int, float)):  # Handle Excel serial numbers
+        try:
+            return pd.to_datetime(date, origin='1899-12-30', unit='D').date()
+        except Exception:
+            return pd.NaT
+
+    date_formats = ["%Y-%m-%d", "%d/%m/%Y", "%m-%d-%Y", "%d-%m-%Y", "%Y.%m.%d", "%Y-%b-%d"]
+
+    for fmt in date_formats:
+        try:
+            return pd.to_datetime(date, format=fmt).date()
+        except (ValueError, TypeError):
+            continue
+
+    try:
+        return parser.parse(str(date), fuzzy=True, ignoretz=True).date()
+    except (parser.ParserError, ValueError, TypeError):
+        return pd.NaT
+
+
+@app.route('/')
+def home():
+    return render_template('index.html')
+
+@app.route('/fetch', methods=['POST'])
+def fetch_data():
+    if "file" not in request.files:
+        return jsonify({"message": "No file part"}), 400
+
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"message": "No selected file"}), 400
+
+    if not file.filename.endswith((".xlsx", ".xls")):
+        return jsonify({"message": "Invalid file type. Only Excel files allowed."}), 400
+
+    try:
+        df = pd.read_excel(file)
+        #df.to_excel('df.xlsx')
+        # df2.to_excel("df2.xlsx", index=False)  # Optional save
+
+        # Read start and end dates from form data
+        #start_date = request.form.get("startDate")
+        end_date = request.form.get("endDate")
+
+        global formatted_period
+        if end_date:
+            end_date = pd.to_datetime(end_date)
+            formatted_period = end_date.to_period('M').strftime('%B %Y')
+            Period = end_date.to_period('M')  # Add this line
+
+        # ...your data processing logic here...
+        bins = [0, 0.99, 4, 9, 14, 19, 24, 29, 34, 39, 44, 49, 54, 59, 64, float('inf')]
+        labels = ['<1', '1-4', '5-9', '10-14', '15-19', '20-24', '25-29', '30-34', 
+                '35-39', '40-44', '45-49', '50-54', '55-59', '60-64', '65+']
+
+        bins2 = [0, 14, float('inf')]
+        labels2 = ['<15', '>=15']
+
+        #df = pd.read_excel("df2.xlsx", sheet_name=0)
+        
+        #Convert Date Objects to Date using dateutil
+        dfDates = ['DateConfirmedHIV+', 'ARTStartDate', 'Pharmacy_LastPickupdate', 'Pharmacy_LastPickupdate_PreviousQuarter', 'DateofCurrentViralLoad', 'DateResultReceivedFacility', 'LastDateOfSampleCollection', 'Outcomes_Date', 'IIT_Date', 'DOB', 'Date_Transfered_In', 'DateofFirstTLD_Pickup', 'EstimatedNextAppointmentPharmacy', 'Next_Ap_by_careCard', 'IPT_Screening_Date', 'First_TPT_Pickupdate', 'Last_TPT_Pickupdate', 'Current_TPT_Received', 'Date_of_TPT_Outcome', 'DateofCurrent_TBStatus', 'TB_Treatment_Start_Date', 'TB_Treatment_Stop_Date', 'Date_Enrolled_Into_OTZ', 'Date_Enrolled_Into_OTZ_Plus', 'PBS_Capture_Date', 'Date_Generated', 'PBS_Recapture_Date']
+        for col in dfDates:
+            df[col] = df[col].apply(parse_date)
+            
+        #Clean numbers
+        dfnumeric = ['AgeAtStartofART', 'AgeinMonths', 'DaysOnART', 'DaysOfARVRefill', 'CurrentViralLoad', 'Current_Age', 'Weight', 'Height', 'BMI', 'Whostage', 'CurrentCD4', 'Days_To_Schedule']
+        for col in dfnumeric:
+            df[col] = pd.to_numeric(df[col],errors='coerce')
+
+        # Ensure the DOB column is in datetime format
+        df['DOB'] = pd.to_datetime(df['DOB'], errors='coerce')  # 'coerce' will turn invalid dates into NaT (Not a Time)
+
+        # Calculate age by subtracting DOB from today's date and dividing by 365.25 for leap years
+        today = pd.to_datetime('today')  # Get the current date
+        df['Age'] = (today - df['DOB']).dt.days / 365.25  # Convert the difference to years
+
+        df['Age Band'] = pd.cut(df['Age'], bins=bins, labels=labels)
+        df['Age Band2'] = pd.cut(df['Age'], bins=bins2, labels=labels2)
+        last_year = (Period.to_timestamp() - pd.DateOffset(months=12)).to_period('M')
+        last_6mths = (Period.to_timestamp() - pd.DateOffset(months=6)).to_period('M')
+
+        # Creating additional columns for pregnant, breastfeeding, and TB clients
+        df['IsPregnant'] = df['CurrentPregnancyStatus'].apply(lambda x: 1 if x == "Pregnant" else 0)
+        df['IsBreastfeeding'] = df['CurrentPregnancyStatus'].apply(lambda x: 1 if x == "Breastfeeding" else 0)
+        df['OnTB'] = df['Current_TB_Status'].apply(lambda x: 1 if x == "On treatment for disease" else 0)
+
+        # Creating columns for regimen line
+        df['IsFirstLine'] = df['CurrentRegimenLine'].apply(lambda x: 1 if x in ['Adult 1st line ARV regimen', 'Child 1st line ARV regimen'] else 0)
+        df['IsSecondLine'] = df['CurrentRegimenLine'].apply(lambda x: 1 if x in ['Adult 2nd line ARV regimen', 'Child 2nd line ARV regimen'] else 0)
+        df['isThirdLine'] = df['CurrentRegimenLine'].apply(lambda x: 1 if x  in ['Adult 3rd Line ARV Regimens', 'Child 3rd line ARV regimen'] else 0)
+
+        # Creating MMD columns
+        df['IsMMD3'] = df['DaysOfARVRefill'].apply(lambda x: 1 if x == 90 else 0)
+        df['IsMMD4'] = df['DaysOfARVRefill'].apply(lambda x: 1 if x == 120 else 0)
+        df['IsMMD5'] = df['DaysOfARVRefill'].apply(lambda x: 1 if x == 150 else 0)
+        df['IsMMD6'] = df['DaysOfARVRefill'].apply(lambda x: 1 if x == 180 else 0)
+
+        # Creating DSD Models columns
+        df['IsFacilityModel'] = df['DSD_Model'].apply(lambda x: 1 if x == 'Facility Dispensing' else 0)
+        df['IsCommunityModel'] = df['DSD_Model'].apply(lambda x: 1 if x == 'Decentralized Drug Delivery (DDD)' else 0)
+        
+        
+        #ART 2 (Newly Started on ART
+        # Ensure ARTStartDate is in datetime format
+        df['ARTStartDate'] = pd.to_datetime(df['ARTStartDate'])
+
+        # Filter only active clients
+        df_TxNew = df[df['ARTStartDate'].dt.to_period('M') == Period].copy()
+
+        # Use .loc to safely set values in the subset
+        df_TxNew.loc[:, 'TxNew'] = df_TxNew['CurrentARTStatus'].apply(lambda x: 1 if x == "Active" else 0)
+
+        # Creating the original summary pivot table
+        ART2Summary = df_TxNew.pivot_table(
+            index='Sex',
+            columns='Age Band',
+            values='TxNew',
+            aggfunc='sum',
+            fill_value=0,
+            observed=False
+        )
+
+        # Reindexing and renaming Sex categories
+        ART2Summary = ART2Summary.reindex(['M', 'F'])
+        ART2Summary.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
+
+        # Adding 'Total' column
+        ART2Summary['Total'] = ART2Summary.sum(axis=1)
+
+        # Summing new clients and the new categories
+        sum_pregnant = df_TxNew[df_TxNew['IsPregnant'] == 1]['TxNew'].sum()
+        sum_breastfeeding = df_TxNew[df_TxNew['IsBreastfeeding'] == 1]['TxNew'].sum()
+        sum_on_tb = df_TxNew[df_TxNew['OnTB'] == 1]['TxNew'].sum()
+
+        # Adding new rows for Pregnant, Breastfeeding, and TB Patients with NaN (blank) values
+        ART2Summary.loc['Pregnant', :] = np.nan
+        ART2Summary.loc['Breastfeeding', :] = np.nan
+        ART2Summary.loc['TB Patients', :] = np.nan
+
+        # Adding total sums to the new rows
+        ART2Summary.loc['Pregnant', 'Total'] = sum_pregnant
+        ART2Summary.loc['Breastfeeding', 'Total'] = sum_breastfeeding
+        ART2Summary.loc['TB Patients', 'Total'] = sum_on_tb
+
+        # Display the modified summary
+        ART2Summary
+        
+        
+        #ART 3 (Current on ART)
+        # Filter only active clients
+        df_active = df[df['CurrentARTStatus'] == "Active"].copy()
+        df_active.loc[:, 'TCS1'] = df_active['CurrentARTStatus'].apply(lambda x: 1 if x == "Active" else 0)
+
+        # Creating the original ART3Summary pivot table
+        ART3Summary = df_active.pivot_table(
+            index='Sex',
+            columns='Age Band',
+            values='TCS1',
+            aggfunc='sum',
+            fill_value=0,
+            observed=False
+        )
+
+        ART3Summary = ART3Summary.reindex(['M', 'F'])
+        ART3Summary.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
+        ART3Summary['Total'] = ART3Summary.sum(axis=1)
+
+        # Summing TCS1 for only active clients and the new categories
+        sum_pregnant = df_active[df_active['IsPregnant'] == 1]['TCS1'].sum()
+        sum_breastfeeding = df_active[df_active['IsBreastfeeding'] == 1]['TCS1'].sum()
+
+        # Adding new rows with NaN (blank) values to avoid dtype issues
+        ART3Summary.loc['Pregnant (subset of ART 3)', :] = np.nan
+        ART3Summary.loc['Breastfeeding (subset of ART 3)', :] = np.nan
+
+        # Adding new rows for Pregnant, Breastfeeding, and OnTB as total sums
+        ART3Summary.loc['Pregnant (subset of ART 3)', 'Total'] = sum_pregnant
+        ART3Summary.loc['Breastfeeding (subset of ART 3)', 'Total'] = sum_breastfeeding
+
+        # Display the modified ART3Summary
+        ART3Summary
+        
+        #ART3 CONTD Regimen Lines
+        def get_group_summary(df_sub, label):
+            pt = df_sub.pivot_table(
+                index=None,
+                columns=['Sex', 'Age Band2'],
+                values='TCS1',
+                aggfunc='sum',
+                fill_value=0,
+                observed=False
+            )
+            pt = pt.reindex(columns=pd.MultiIndex.from_product([['M', 'F'], ['<15', '>=15']]), fill_value=0)
+            pt.columns.names = ['Sex', 'Age Group']
+            pt.rename(columns={'M': 'Male', 'F': 'Female'}, level=0, inplace=True)
+
+            # Create a one-row DataFrame labeled with 'label'
+            row = pt.iloc[0] if not pt.empty else [0] * pt.shape[1]
+            return pd.DataFrame([row], index=[label])
+
+        regimenlines = []
+
+        # Call function and append results
+        regimenlines.append(get_group_summary(df_active[df_active['IsFirstLine'] == 1], '1st Line (subset of ART 3)'))
+        regimenlines.append(get_group_summary(df_active[df_active['IsSecondLine'] == 1], '2nd Line (subset of ART 3)'))
+        regimenlines.append(get_group_summary(df_active[df_active['isThirdLine'] == 1], '3rd Line (subset of ART 3)'))
+
+        # Combine all into one DataFrame
+        ART3aSummary = pd.concat(regimenlines)
+        total_row = ART3aSummary.sum(numeric_only=True).to_frame().T
+        total_row.index = ['Total']
+        ART3aSummary = pd.concat([ART3aSummary, total_row])
+        ART3aSummary
+        
+        
+        #ART 3 CONTD MMDs
+        MMDs = []
+        MMDs.append(get_group_summary(df_active[df_active['IsMMD3'] == 1], 'MMD3'))
+        MMDs.append(get_group_summary(df_active[df_active['IsMMD4'] == 1], 'MMD4'))
+        MMDs.append(get_group_summary(df_active[df_active['IsMMD5'] == 1], 'MMD5'))
+        MMDs.append(get_group_summary(df_active[df_active['IsMMD6'] == 1], 'MMD6'))
+
+        ART3bSummary = pd.concat(MMDs)
+        total_row = ART3bSummary.sum(numeric_only=True).to_frame().T
+        total_row.index = ['Total']
+        ART3bSummary = pd.concat([ART3bSummary, total_row])
+        ART3bSummary
+        
+        
+        #ART3 CONTD MODELS
+        ART3cSummary = df_active.pivot_table(
+            index='DSD_Model',
+            columns=None,
+            values='TCS1',
+            aggfunc='sum',
+            fill_value=0,
+            observed=False
+        )
+
+        ART3cSummary.rename(index={'Facility Dispensing': 'Facility-based models', 'Decentralized Drug Delivery (DDD)': 'Community-based models'}, inplace=True)
+        ART3cSummary = ART3cSummary.reindex(['Facility-based models', 'Community-based models'])
+
+        ART3cSummary
+        
+        
+        #ART 5 (Current on ART)
+        df['Pharmacy_LastPickupdate'] = pd.to_datetime(df['Pharmacy_LastPickupdate'])
+
+        # Ensure the 'Pharmacy_LastPickupdate' column is in datetime format and fill NaNs with a specific date
+        df['Pharmacy_LastPickupdate2'] = pd.to_datetime(df['Pharmacy_LastPickupdate'], errors='coerce').fillna(pd.to_datetime('1900'))
+
+        #Fill zero if the column contains number greater than 180
+        df['DaysOfARVRefill2'] = df['DaysOfARVRefill'].apply(lambda x: 0 if x > 180 else x)
+
+        # Calculate the 'NextAppt' column by adding the 'DaysOfARVRefill2' to 'Pharmacy_LastPickupdate2'
+        df['NextAppt'] = df['Pharmacy_LastPickupdate2'] + pd.to_timedelta(df['DaysOfARVRefill2'], unit='D') 
+        df['IITDate2'] = (df['NextAppt'] + pd.Timedelta(days=29)).fillna('1900')
+
+        df['Losses date'] = df['Outcomes_Date']
+        df.loc[df['Losses date'].isna(), 'Losses date'] = df['IITDate2']
+        df['Losses date'] = pd.to_datetime(df['Losses date'])
+
+        df['Loss Month'] = df['Losses date'].dt.to_period('M')
+
+        # Filter for losses within the month
+        df_Losses = df[
+            df['CurrentARTStatus'].isin(["Death", "Transferred out", "LTFU", "Discontinued Care"]) &
+            (df['Losses date'].dt.to_period('M') == Period)
+        ].copy()
+
+        df_Losses.loc[:, 'Losses'] = df_Losses['CurrentARTStatus'].apply(
+            lambda x: 1 if x in ["Death", "Transferred out", "LTFU", "Discontinued Care"] else 0
+        )
+
+        df_Losses.loc[:, 'Dead'] = df_Losses['CurrentARTStatus'].apply(lambda x: 1 if x == "Death" else 0)
+        df_Losses.loc[:, 'Transferred out'] = df_Losses['CurrentARTStatus'].apply(lambda x: 1 if x == "Transferred out" else 0)
+        df_Losses.loc[:, 'LTFU'] = df_Losses['CurrentARTStatus'].apply(lambda x: 1 if x == "LTFU" else 0)
+        df_Losses.loc[:, 'Discontinued Care'] = df_Losses['CurrentARTStatus'].apply(lambda x: 1 if x == "Discontinued Care" else 0)
+
+        # Creating the original summary pivot table
+        ART5summary = df_Losses.pivot_table(
+            index='Sex',
+            columns='Age Band',
+            values='Losses',
+            aggfunc='sum',
+            fill_value=0,
+            observed=False
+        )
+
+        ART5summary = ART5summary.reindex(['M', 'F'])
+        ART5summary.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
+        ART5summary['Total'] = ART5summary.sum(axis=1)
+
+        # Summing TCS1 for only active clients and the new categories
+        sum_TO = df_Losses[df_Losses['Transferred out'] == 1]['Losses'].sum()
+        sum_Stopped = df_Losses[df_Losses['Discontinued Care'] == 1]['Losses'].sum()
+        sum_LTFU = df_Losses[df_Losses['LTFU'] == 1]['Losses'].sum()
+        sum_Dead = df_Losses[df_Losses['Dead'] == 1]['Losses'].sum()
+
+        # Adding new rows with NaN (blank) values to avoid dtype issues
+        ART5summary.loc['Transferred out (subset of ART 5)', :] = np.nan
+        ART5summary.loc['Stopped treatment (subset of ART 5)', :] = np.nan
+        ART5summary.loc['Lost to follow up (subset of ART 5)', :] = np.nan
+        ART5summary.loc['Dead (subset of ART 5)', :] = np.nan
+
+        # Adding new rows for Pregnant, Breastfeeding, and OnTB as total sums
+        ART5summary.loc['Transferred out (subset of ART 5)', 'Total'] = sum_TO
+        ART5summary.loc['Stopped treatment (subset of ART 5)', 'Total'] = sum_Stopped
+        ART5summary.loc['Lost to follow up (subset of ART 5)', 'Total'] = sum_LTFU
+        ART5summary.loc['Dead (subset of ART 5)', 'Total'] = sum_Dead
+
+        # Display the modified summary
+        ART5summary
+        
+        
+        #ART 6 (VL Routine)
+        # Filter only active clients
+        df['DateResultReceivedFacility'] = pd.to_datetime(df['DateResultReceivedFacility'])
+        df['ARTStartDate'] = pd.to_datetime(df['ARTStartDate'])
+
+        df_VL = df[
+            (df['CurrentARTStatus'] == "Active") &
+            (df['DateResultReceivedFacility'].dt.to_period('M') > last_year) &
+            (df['ARTStartDate'].dt.to_period('M') < last_6mths)
+        ].copy()
+
+        df_VL.loc[:, 'VLRoutine'] = df_VL['ViralLoadIndication'].apply(lambda x: 1 if (x in ['Normal priority (status)', 'Initial']) or pd.isna(x) else 0)
+        df_VL.loc[:, 'VLTargeted'] = df_VL['ViralLoadIndication'].apply(lambda x: 1 if x in ['Confirmation', 'PMTCT, 32 - 36 weeks gestation', 'Repeat'] else 0)
+
+
+        # Creating the original summary pivot table
+        VLRoutine = df_VL.pivot_table(
+            index='Sex',
+            columns='Age Band',
+            values='VLRoutine',
+            aggfunc='sum',
+            fill_value=0,
+            observed=False
+        )
+
+        VLRoutine = VLRoutine.reindex(['M', 'F'])
+        VLRoutine.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
+        VLRoutine['Total'] = VLRoutine.sum(axis=1)
+
+        # Summing new categories
+        sum_pregnant = df_VL[df_VL['IsPregnant'] == 1]['VLRoutine'].sum()
+        sum_breastfeeding = df_VL[df_VL['IsBreastfeeding'] == 1]['VLRoutine'].sum()
+
+        # Adding new rows with NaN (blank) values to avoid dtype issues
+        VLRoutine.loc['Pregnant (subset of ART 6)', :] = np.nan
+        VLRoutine.loc['Breastfeeding (subset of ART 6)', :] = np.nan
+
+        # Adding new rows for Pregnant, Breastfeeding, and OnTB as total sums
+        VLRoutine.loc['Pregnant (subset of ART 6)', 'Total'] = sum_pregnant
+        VLRoutine.loc['Breastfeeding (subset of ART 6)', 'Total'] = sum_breastfeeding
+
+        # Display the modified summary
+        VLRoutine
+        
+        
+        #ART 6 VL Targeted
+        # Creating the original summary pivot table
+        VLTargeted = df_VL.pivot_table(
+            index='Sex',
+            columns='Age Band',
+            values='VLTargeted',
+            aggfunc='sum',
+            fill_value=0,
+            observed=False
+        )
+
+        VLTargeted = VLTargeted.reindex(['M', 'F'])
+        VLTargeted.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
+        VLTargeted['Total'] = VLTargeted.sum(axis=1)
+
+        # Summing new categories
+        sum_pregnant = df_VL[df_VL['IsPregnant'] == 1]['VLTargeted'].sum()
+        sum_breastfeeding = df_VL[df_VL['IsBreastfeeding'] == 1]['VLTargeted'].sum()
+        sum_Fac_model = df_VL[df_VL['IsFacilityModel'] == 1]['VLTargeted'].sum()
+        sum_cot_model = df_VL[df_VL['IsCommunityModel'] == 1]['VLTargeted'].sum()
+
+        # Adding new rows for Pregnant, Breastfeeding, and OnTB as total sums
+        VLTargeted.loc['Pregnant (subset of ART 6)', 'Total'] = sum_pregnant
+        VLTargeted.loc['Breastfeeding (subset of ART 6)', 'Total'] = sum_breastfeeding
+        VLTargeted.loc['Facility-based DSD models (subset of ART 6)', 'Total'] = sum_pregnant
+        VLTargeted.loc['Community-based DSD models (subset of ART 6)', 'Total'] = sum_breastfeeding
+
+        # Display the modified summary
+        VLTargeted
+        
+        
+        #ART 7 (VL Routine Suppressed)
+        # Filter only active clients
+        df_VL_Sup = df[
+            (df['CurrentARTStatus'] == "Active") &
+            (df['DateResultReceivedFacility'].dt.to_period('M') > last_year) &
+            (df['ARTStartDate'].dt.to_period('M') < last_6mths) &
+            (df['CurrentViralLoad'] < 1000)
+        ].copy()
+
+        df_VL_Sup.loc[:, 'VLRoutine_Sup'] = df_VL_Sup['ViralLoadIndication'].apply(lambda x: 1 if (x in ['Normal priority (status)', 'Initial']) or pd.isna(x) else 0)
+        df_VL_Sup.loc[:, 'VLTargeted_Sup'] = df_VL_Sup['ViralLoadIndication'].apply(lambda x: 1 if x in ['Confirmation', 'PMTCT, 32 - 36 weeks gestation', 'Repeat'] else 0)
+
+
+        # Creating the original summary pivot table
+        VLRoutine_Sup = df_VL_Sup.pivot_table(
+            index='Sex',
+            columns='Age Band',
+            values='VLRoutine_Sup',
+            aggfunc='sum',
+            fill_value=0,
+            observed=False
+        )
+
+        VLRoutine_Sup = VLRoutine_Sup.reindex(['M', 'F'])
+        VLRoutine_Sup.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
+        VLRoutine_Sup['Total'] = VLRoutine_Sup.sum(axis=1)
+
+        # Summing new categories
+        sum_pregnant = df_VL_Sup[df_VL_Sup['IsPregnant'] == 1]['VLRoutine_Sup'].sum()
+        sum_breastfeeding = df_VL_Sup[df_VL_Sup['IsBreastfeeding'] == 1]['VLRoutine_Sup'].sum()
+
+        # Adding new rows with NaN (blank) values to avoid dtype issues
+        VLRoutine_Sup.loc['Pregnant (subset of ART 6)', :] = np.nan
+        VLRoutine_Sup.loc['Breastfeeding (subset of ART 6)', :] = np.nan
+
+        # Adding new rows for Pregnant, Breastfeeding, and OnTB as total sums
+        VLRoutine_Sup.loc['Pregnant (subset of ART 6)', 'Total'] = sum_pregnant
+        VLRoutine_Sup.loc['Breastfeeding (subset of ART 6)', 'Total'] = sum_breastfeeding
+
+        # Display the modified summary
+        VLRoutine_Sup
+        
+        
+        #ART 7 VL Targeted Suppressed
+        # Creating the original summary pivot table
+        VLTargeted_Sup = df_VL_Sup.pivot_table(
+            index='Sex',
+            columns='Age Band',
+            values='VLTargeted_Sup',
+            aggfunc='sum',
+            fill_value=0,
+            observed=False
+        )
+
+        VLTargeted_Sup = VLTargeted_Sup.reindex(['M', 'F'])
+        VLTargeted_Sup.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
+        VLTargeted_Sup['Total'] = VLTargeted_Sup.sum(axis=1)
+
+        # Summing new categories
+        sum_pregnant = df_VL_Sup[df_VL_Sup['IsPregnant'] == 1]['VLTargeted_Sup'].sum()
+        sum_breastfeeding = df_VL_Sup[df_VL_Sup['IsBreastfeeding'] == 1]['VLTargeted_Sup'].sum()
+        sum_Fac_model = df_VL_Sup[df_VL_Sup['IsFacilityModel'] == 1]['VLTargeted_Sup'].sum()
+        sum_cot_model = df_VL_Sup[df_VL_Sup['IsCommunityModel'] == 1]['VLTargeted_Sup'].sum()
+
+        # Adding new rows for Pregnant, Breastfeeding, and OnTB as total sums
+        VLTargeted_Sup.loc['Pregnant (subset of ART 6)', 'Total'] = sum_pregnant
+        VLTargeted_Sup.loc['Breastfeeding (subset of ART 6)', 'Total'] = sum_breastfeeding
+        VLTargeted_Sup.loc['Facility-based DSD models (subset of ART 6)', 'Total'] = sum_pregnant
+        VLTargeted_Sup.loc['Community-based DSD models (subset of ART 6)', 'Total'] = sum_breastfeeding
+
+        # Display the modified summary
+        VLTargeted_Sup
+        
+        
+        with pd.ExcelWriter('ART MSF SUMMARY.xlsx', engine="xlsxwriter") as writer:
+
+            dataframes = {
+                "ART2Summary": ART2Summary,
+                "ART3Summary": ART3Summary,
+                "ART3aSummary": ART3aSummary,
+                "ART3bSummary": ART3bSummary,
+                "ART3cSummary": ART3cSummary,
+                "ART5summary": ART5summary,
+                "VLRoutine": VLRoutine,
+                "VLTargeted": VLTargeted,
+                "VLRoutine_Sup": VLRoutine_Sup,
+                "VLTargeted_Sup": VLTargeted_Sup
+            }
+
+            for sheet_name, df in dataframes.items():
+                workbook = writer.book
+
+                # Flatten MultiIndex columns if present
+                if isinstance(df.columns, pd.MultiIndex):
+                    df.columns = [' | '.join(map(str, col)).strip() for col in df.columns.values]
+
+                # Write dataframe including index
+                df.to_excel(writer, sheet_name=sheet_name, startrow=2, header=False, index=True)
+                worksheet = writer.sheets[sheet_name]
+
+                # Header formatting
+                header_format = workbook.add_format({
+                    "bold": True,
+                    "text_wrap": True,
+                    "valign": "bottom",
+                    "align": "center",
+                    "fg_color": "#D7E4BC",
+                    "border": 1,
+                    "font_size": 10,
+                    "shrink": True
+                })
+
+                # Write index name in first column header if present
+                if df.index.name:
+                    worksheet.write(1, 0, df.index.name, header_format)
+                else:
+                    worksheet.write(1, 0, "Index", header_format)
+
+                # Write column headers, starting from second column (col=1)
+                for col_num, value in enumerate(df.columns.values):
+                    worksheet.write(1, col_num + 1, value, header_format)
+        
+        
+        # Load Excel source file
+        xls = pd.ExcelFile("ART MSF SUMMARY.xlsx")
+
+        # Define the original sheet sequence
+        sheet_sequence = [
+            "ART2Summary", "ART3Summary", "ART3aSummary", "ART3bSummary",
+            "ART3cSummary", "ART5summary", "VLRoutine", "VLTargeted",
+            "VLRoutine_Sup", "VLTargeted_Sup"
+        ]
+
+        # Create new workbook and worksheet
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "ART MSF"
+
+        # Define a title mapping for each sheet
+        sheet_titles = {
+            "ART2Summary": "ART 2: Number of people living with HIV newly started on ART during the month (excludes ART transfer-in)",
+            "ART3Summary": "ART 3: Number of people living with HIV who are currently receiving ART during the month (All regimens)",
+            "ART3aSummary": "ART 3 Regimen Lines",
+            "ART3bSummary": "ART 3 Multi-Month Dispensing",
+            "ART3cSummary": "ART 3 DSD Model",
+            "ART5summary": "ART 5: Number of PLHIV on ART (who were on ART at the beginning of the reporting period or initiated treatment during the reporting period) and had no clinical contact since their last expected contact.",
+            "VLRoutine": "ART 6: Number of PLHIV on ART for at least 6 months with a VL test result during the month - Routine",
+            "VLTargeted": "ART 6: Number of PLHIV on ART for at least 6 months with a VL test result during the month - Targeted",
+            "VLRoutine_Sup": "ART 7: Number of PLHIV on ART (for at least 6 months) who have virologic suppression (<1000 copies/ml) during the month - Routine",
+            "VLTargeted_Sup": "ART 7: Number of PLHIV on ART (for at least 6 months) who have virologic suppression (<1000 copies/ml) during the month - Targeted"
+        }
+
+        # Function to add section title and DataFrame to worksheet with style
+        def append_df_with_title(ws, title, df, start_row):
+            # Merge the title across all columns
+            total_cols = len(df.columns) + 1  # +1 for index
+            ws.merge_cells(start_row=start_row, start_column=1, end_row=start_row, end_column=total_cols)
+            title_cell = ws.cell(row=start_row, column=1)
+            title_cell.value = title
+            title_cell.font = Font(bold=True, size=11)
+            title_cell.alignment = Alignment(horizontal='center', vertical='center')
+            
+            start_row += 1
+
+            # Use the first row of the dataframe as the header
+            df.columns = df.iloc[0]  # Set the first row as the header
+            df = df.drop(index=0)  # Drop the first row since it's now used as the header
+
+            # Add header row
+            for col_num, value in enumerate(df.columns.values):
+                cell = ws.cell(row=start_row, column=col_num + 1)
+                cell.value = value
+                cell.font = Font(bold=True)
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+                cell.fill = PatternFill(start_color="D7E4BC", end_color="D7E4BC", fill_type="solid")
+            
+            # Add dataframe content
+            for row_num, row in enumerate(dataframe_to_rows(df, index=False, header=False), start=start_row + 1):
+                for col_num, value in enumerate(row):
+                    cell = ws.cell(row=row_num, column=col_num + 1)
+                    cell.value = value
+
+            # Alternating row color
+            for row_num in range(start_row + 1, start_row + len(df) + 1):
+                if row_num % 2 == 0:
+                    for col_num in range(1, total_cols + 1):
+                        cell = ws.cell(row=row_num, column=col_num)
+                        cell.fill = PatternFill(start_color="F9F9F9", end_color="F9F9F9", fill_type="solid")
+
+            return start_row + len(df) + 2
+
+        # Add general title at the top of the sheet
+        general_title = f"ART Monthly Summary Form As At {formatted_period}"
+        ws.merge_cells('A1:Q1')  # Merge cells from A1 to Q1 (adjust columns as needed)
+        # Set the general title in the merged cell
+        general_title_cell = ws.cell(row=1, column=1)
+        general_title_cell.value = general_title
+        general_title_cell.font = Font(bold=True, size=20)
+        general_title_cell.alignment = Alignment(horizontal='center', vertical='center')
+        general_title_cell.fill = PatternFill(start_color="F9F9F9", end_color="F9F9F9", fill_type="solid")
+        ws.freeze_panes = 'A2'
+
+
+        #worksheet.merge_range(0, 0, 0, len(dataframe.columns) - 1, title_text, title_format)
+
+        # Merge each sheet into the single worksheet
+        start_row = 2
+        for sheet_name in sheet_sequence:
+            df = xls.parse(sheet_name)
+            title = sheet_titles.get(sheet_name, sheet_name)
+            start_row = append_df_with_title(ws, f">>> {title}", df, start_row)
+
+        # Set column widths
+        for col in range(1, ws.max_column + 1):
+            max_length = 0
+            column = chr(64 + col)  # Get the column letter (A, B, C, etc.)
+            
+            # Special case: set fixed width for the first 5 columns (adjust as necessary)
+            if col <= 5:
+                adjusted_width = 10  # Set a fixed width for the first 5 columns
+            if col <= 1:
+                adjusted_width = 45  # Set a fixed width for the first 5 columns
+            else:
+                for row in ws.iter_rows(min_col=col, max_col=col):
+                    for cell in row:
+                        if cell.value:
+                            max_length = max(max_length, len(str(cell.value)))
+                adjusted_width = max_length + 2  # Add some padding
+            
+            # Apply the width to the column
+            ws.column_dimensions[column].width = adjusted_width
+
+        # Remove gridlines (this is done by hiding the gridlines in the sheet view)
+        ws.sheet_view.showGridLines = False
+
+        # Save the merged file
+        wb.save(f"ART MSF SUMMARY AS AT {formatted_period}.xlsx")
+
+        #return successful response
+        return jsonify({"message": "Data fetched and analyzed successfully!", "download_url": "/download"}), 200
+
+        #return jsonify({
+            #"message": "Excel file uploaded and processed successfully.",
+            #"period": formatted_period
+        #})
+
+    except Exception as e:
+        return jsonify({"message": f"Error processing Excel file: {str(e)}"}), 500
+
+@app.route('/download')
+def download_file():
+
+    filename = f"ART MSF SUMMARY AS AT {formatted_period}.xlsx"
+
+    if os.path.exists(filename):
+        return send_file(filename, as_attachment=True)
+    else:
+        return jsonify({"error": f"File {filename} not found"}), 404
+
+if __name__ == '__main__':
+    app.run(debug=True)

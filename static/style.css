@@ -1,0 +1,164 @@
+/* General Page Styling */
+body {
+    font-family: 'Arial', sans-serif;
+    background: linear-gradient(to right, #f4f4f4, #e3e3e3); /* Subtle gradient */
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+/* Container Box */
+.container {
+    width: 50vw;  
+    max-width: 500px; /* Prevents it from getting too wide on large screens */
+    height: auto; /* Adjusts height dynamically */
+    background: white;
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15); /* Softer shadow for depth */
+    text-align: center;
+    position: relative;
+}
+
+/* Title Styling */
+h1 {
+    color: #333;
+    font-size: 1.5rem;
+    margin-bottom: 0px;
+}
+
+h2 {
+    color: #4e4e4e;
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+}
+
+/* Button Styling */
+button {
+    padding: 12px 18px;
+    margin-top: 12px;
+    font-size: 16px;
+    font-weight: bold;
+    background: linear-gradient(to right, #007BFF, #0056b3); /* Gradient effect */
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 10px rgba(0, 123, 255, 0.2);
+}
+
+button:hover {
+    background: linear-gradient(to right, #0056b3, #003d80);
+    transform: scale(1.05); /* Slight zoom effect */
+}
+
+/* Loading Message */
+#loading {
+    margin-top: 15px;
+    font-style: italic;
+    color: #FF5733;
+    font-weight: bold;
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+#message {
+    margin-top: 15px;
+    font-style: italic;
+    color: green;
+    font-weight: bold;
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+#errmessage {
+    margin-top: 15px;
+    font-style: italic;
+    color: red;
+    font-weight: bold;
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+/* Hide Elements */
+.hidden {
+    display: none;
+}
+
+/* Download Links */
+.downloadLink, .downloadLinkgray {
+    display: inline-block;
+    margin-top: 15px;
+    padding: 12px 20px;
+    font-size: 16px;
+    font-weight: bold;
+    color: white;
+    text-decoration: none;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+}
+
+/* Green Download Button */
+.downloadLink {
+    background: linear-gradient(to right, #28A745, #1f8736);
+    box-shadow: 0 2px 10px rgba(40, 167, 69, 0.2);
+}
+
+.downloadLink:hover {
+    background: linear-gradient(to right, #1f8736, #155e27);
+    transform: scale(1.05);
+}
+
+/* Gray Download Button */
+.downloadLinkgray {
+    background: linear-gradient(to right, #6c757d, #495057);
+    box-shadow: 0 2px 10px rgba(108, 117, 125, 0.2);
+}
+
+.downloadLinkgray:hover {
+    background: linear-gradient(to right, #495057, #343a40);
+    transform: scale(1.05);
+}
+
+/* Make buttons stack vertically */
+.button-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px; /* Space between buttons */
+    align-items: center; /* Optional: center buttons horizontally */
+}
+
+/* Optional: Make buttons take full width of container */
+.button-group button {
+    width: 100%;
+}
+
+
+/* Smooth Fade-in Animation */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.date-picker-group {
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.date-picker-group label {
+    margin: 0 10px;
+    font-weight: bold;
+}
+
+.date-picker-group input[type="date"] {
+    padding: 5px;
+    margin: 0 10px;
+}
+
