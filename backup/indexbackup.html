@@ -19,15 +19,10 @@
             <label for="endDate">Select Reporting Period:</label>
             <input type="month" id="endDate" name="endDate">
         </div>
-        <br>
-        <h2>Select Current Reporting Period ART Line List (Required)</h2>
-        <input type="file" id="fileInput" name="file1" accept=".xlsx,.xls" />
-        <br><br>
-        <h2>Select Previous Reporting Period ART Line List (Recommended)</h2>
-        <input type="file" id="fileInput2" name="file2" accept=".xlsx,.xls" />
         
+        <h2>Select ART Line List (Excel File Required)</h2>
+        <input type="file" id="fileInput" accept=".xlsx,.xls" />
         <div id="uploadMessage"></div>
-        <br><br>
 
         <div class="button-group">
             <button id="fetchData">ART LINE LIST TO ART MSF</button>
@@ -50,33 +45,25 @@
 
         $(document).ready(function () {
             $("#fetchData").click(function () {
-                const fileInput1 = $("#fileInput")[0];
-                const fileInput2 = $("#fileInput2")[0];
-                const file1 = fileInput1.files[0];
-                const file2 = fileInput2.files[0];
+                const fileInput = $("#fileInput")[0];
+                const file = fileInput.files[0];
+                const startDate = $("#startDate").val();
                 const endDate = $("#endDate").val();
 
-                if (!file1) {
-                    $("#message").text("Please select Current ART Line List Excel file.").addClass("errmessage");
+                if (!file) {
+                    $("#message").text("Please select an Excel file first.").addClass("errmessage");
                     return;
                 }
 
                 const allowedExtensions = /(\.xlsx|\.xls)$/i;
-                if (!allowedExtensions.exec(file1.name)) {
-                    $("#message").text("Current ART Line List must be an Excel file (.xlsx or .xls).").addClass("errmessage");
-                    return;
-                }
-
-                if (file2 && !allowedExtensions.exec(file2.name)) {
-                    $("#message").text("Baseline ART Line List must be an Excel file (.xlsx or .xls).").addClass("errmessage");
+                if (!allowedExtensions.exec(file.name)) {
+                    $("#message").text("Only Excel files (.xlsx, .xls) are allowed.").addClass("errmessage");
                     return;
                 }
 
                 const formData = new FormData();
-                formData.append("file1", file1);
-                if (file2) {
-                    formData.append("file2", file2); // Only append if it exists
-                }
+                formData.append("file", file);
+                formData.append("startDate", startDate);
                 formData.append("endDate", endDate);
 
                 $("#loading").removeClass("hidden");
@@ -107,7 +94,6 @@
                     }
                 });
             });
-
         });
     </script>
 </body>

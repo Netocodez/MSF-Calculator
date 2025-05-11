@@ -60,29 +60,20 @@ def home():
 
 @app.route('/fetch', methods=['POST'])
 def fetch_data():
-    
-    if "file1" not in request.files:
-        return jsonify({"message": "Current ART Line list (file1) is required."}), 400
+    if "file" not in request.files:
+        return jsonify({"message": "No file part"}), 400
 
-    file1 = request.files["file1"]
-    file2 = request.files.get("file2")  # May be None
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"message": "No selected file"}), 400
 
-    # Validate file1 presence and type
-    if not file1 or not file1.filename.endswith((".xlsx", ".xls")):
-        return jsonify({"message": "Current ART Line List must be an Excel file (.xlsx or .xls)."}), 400
-
-    # Validate file2 only if provided
-    if file2 and not file2.filename.endswith((".xlsx", ".xls")):
-        return jsonify({"message": "Baseline ART Line List must be an Excel file (.xlsx or .xls)."}), 400
+    if not file.filename.endswith((".xlsx", ".xls")):
+        return jsonify({"message": "Invalid file type. Only Excel files allowed."}), 400
 
     try:
-        df = pd.read_excel(file1)
+        df = pd.read_excel(file)
         #df.to_excel('df.xlsx')
-        if file2:
-            dfBaseline = pd.read_excel(file2, sheet_name=0)
-            df = df.merge(dfBaseline[['uuid', 'CurrentARTStatus']], on='uuid', how='left', suffixes=('', '_baseline'))
-            df['ARTStatus_PreviousQuarter'] = df['CurrentARTStatus_baseline']
-            #df.to_excel("merged2.xlsx")
+        # df2.to_excel("df2.xlsx", index=False)  # Optional save
 
         # Read start and end dates from form data
         #start_date = request.form.get("startDate")
@@ -513,116 +504,6 @@ def fetch_data():
         # Display the modified summary
         VLTargeted_Sup
         
-        
-        #added
-        #ART 8 (Restart)
-        df['Date_Transfered_In'] = pd.to_datetime(df['Date_Transfered_In'])
-        df['ARTStartDate'] = pd.to_datetime(df['ARTStartDate'])
-
-        # Filter only active clients
-        df_Restart = df[(df['CurrentARTStatus'] == "Active") & 
-                    ((df['ARTStatus_PreviousQuarter'] != "Active") & (df['ARTStatus_PreviousQuarter'].notna())) &
-                    (df['ARTStartDate'].dt.to_period('M') != Period)].copy()
-        df_Restart.loc[:, 'Restart'] = df_Restart['Date_Transfered_In'].dt.to_period('M').apply(lambda x: 1 if x != Period else 0)
-
-        # Creating the original ART3Summary pivot table
-        ART8Summary = df_Restart.pivot_table(
-            index='Sex',
-            columns='Age Band',
-            values='Restart',
-            aggfunc='sum',
-            fill_value=0,
-            observed=False
-        )
-
-        ART8Summary = ART8Summary.reindex(['M', 'F'])
-        ART8Summary.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
-        ART8Summary['Total'] = ART8Summary.sum(axis=1)
-
-        # Display the modified ART8Summary
-        ART8Summary
-        
-        
-        #ART 9 (Transfer In)
-        df['Date_Transfered_In'] = pd.to_datetime(df['Date_Transfered_In'])
-
-        # Filter only active clients
-        df_TI = df[(df['CurrentARTStatus'] == "Active")].copy()
-
-        #df_TI.loc[:, 'TI'] = df_TI['CurrentARTStatus'].apply(lambda x: 1 if x == "Active" else 0)
-        df_TI.loc[:, 'TI'] = df_TI['Date_Transfered_In'].dt.to_period('M').apply(lambda x: 1 if x == Period else 0)
-
-        # Creating the original ART3Summary pivot table
-        ART9Summary = df_TI.pivot_table(
-            index='Sex',
-            columns='Age Band',
-            values='TI',
-            aggfunc='sum',
-            fill_value=0,
-            observed=False
-        )
-
-        ART9Summary = ART9Summary.reindex(['M', 'F'])
-        ART9Summary.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
-        ART9Summary['Total'] = ART9Summary.sum(axis=1)
-
-        # Display the modified ART8Summary
-        ART9Summary
-        
-        
-        #ART 10 (TB Screening Newly Initiated on ART)
-        df['ARTStartDate'] = pd.to_datetime(df['ARTStartDate'])
-
-        # Filter only active clients
-        df_TBScrn = df[(df['CurrentARTStatus'] == "Active") & 
-                    (df['DateofCurrent_TBStatus'].notna())].copy()
-        df_TBScrn.loc[:, 'TBScrnNew'] = df_TBScrn['ARTStartDate'].dt.to_period('M').apply(lambda x: 1 if x == Period else 0)
-
-        # Creating the original ART3Summary pivot table
-        ART10aSummary = df_TBScrn.pivot_table(
-            index='Sex',
-            columns='Age Band',
-            values='TBScrnNew',
-            aggfunc='sum',
-            fill_value=0,
-            observed=False
-        )
-
-        ART10aSummary = ART10aSummary.reindex(['M', 'F'])
-        ART10aSummary.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
-        ART10aSummary['Total'] = ART10aSummary.sum(axis=1)
-
-        # Display the modified ART8Summary
-        ART10aSummary
-        
-        
-        #ART 10b (TB Screening Previously on ART)
-        df['Pharmacy_LastPickupdate'] = pd.to_datetime(df['Pharmacy_LastPickupdate'])
-
-        # Filter only active clients
-        df_TBScrnPrev = df[(df['CurrentARTStatus'] == "Active") & 
-                    (df['DateofCurrent_TBStatus'].notna()) &
-                    (df['Pharmacy_LastPickupdate'].dt.to_period('M') == Period)].copy()
-        df_TBScrnPrev.loc[:, 'TBScrnPrev'] = df_TBScrnPrev['ARTStartDate'].dt.to_period('M').apply(lambda x: 1 if x != Period else 0)
-
-        # Creating the original ART3Summary pivot table
-        ART10bSummary = df_TBScrnPrev.pivot_table(
-            index='Sex',
-            columns='Age Band',
-            values='TBScrnPrev',
-            aggfunc='sum',
-            fill_value=0,
-            observed=False
-        )
-
-        ART10bSummary = ART10bSummary.reindex(['M', 'F'])
-        ART10bSummary.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
-        ART10bSummary['Total'] = ART10bSummary.sum(axis=1)
-
-        # Display the modified ART8Summary
-        ART10bSummary
-        
-        
         # Define the dataframes
         dataframes = {
             "ART2Summary": ART2Summary,
@@ -634,11 +515,7 @@ def fetch_data():
             "VLRoutine": VLRoutine,
             "VLTargeted": VLTargeted,
             "VLRoutine_Sup": VLRoutine_Sup,
-            "VLTargeted_Sup": VLTargeted_Sup,
-            "ART8Summary": ART8Summary,
-            "ART9Summary": ART9Summary,
-            "ART10aSummary": ART10aSummary,
-            "ART10bSummary": ART10bSummary
+            "VLTargeted_Sup": VLTargeted_Sup
         }
 
         # Define a title mapping for each sheet
@@ -652,11 +529,7 @@ def fetch_data():
             "VLRoutine": "ART 6: Number of PLHIV on ART for at least 6 months with a VL test result during the month - Routine",
             "VLTargeted": "ART 6: Number of PLHIV on ART for at least 6 months with a VL test result during the month - Targeted",
             "VLRoutine_Sup": "ART 7: Number of PLHIV on ART (for at least 6 months) who have virologic suppression (<1000 copies/ml) during the month - Routine",
-            "VLTargeted_Sup": "ART 7: Number of PLHIV on ART (for at least 6 months) who have virologic suppression (<1000 copies/ml) during the month - Targeted",
-            "ART8Summary": "ART 8: Number of PLHIV who RESTARTED ART during the month",
-            "ART9Summary": "ART 9: Number of PLHIV who were TRANSFERRED IN during the month ",
-            "ART10aSummary": "ART 10: Number of PLHIV on ART (Including PMTCT) who were Clinically Screened for TB in HIV Treatment Settings - Newly initiated on ART",
-            "ART10bSummary": "ART 10: Number of PLHIV on ART (Including PMTCT) who were Clinically Screened for TB in HIV Treatment Settings - Previously on ART"
+            "VLTargeted_Sup": "ART 7: Number of PLHIV on ART (for at least 6 months) who have virologic suppression (<1000 copies/ml) during the month - Targeted"
         }
 
         # Create a new workbook and add a worksheet
