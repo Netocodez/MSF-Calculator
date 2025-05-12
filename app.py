@@ -372,7 +372,7 @@ def fetch_data():
         df_VL = df[
             (df['CurrentARTStatus'] == "Active") &
             (df['DateResultReceivedFacility'].dt.to_period('M') > last_year) &
-            (df['ARTStartDate'].dt.to_period('M') < last_6mths)
+            (df['ARTStartDate'].dt.to_period('M') <= last_6mths)
         ].copy()
 
         df_VL.loc[:, 'VLRoutine'] = df_VL['ViralLoadIndication'].apply(lambda x: 1 if (x in ['Normal priority (status)', 'Initial', 'PMTCT, 32 - 36 weeks gestation']) or pd.isna(x) else 0)
@@ -445,7 +445,7 @@ def fetch_data():
         df_VL_Sup = df[
             (df['CurrentARTStatus'] == "Active") &
             (df['DateResultReceivedFacility'].dt.to_period('M') > last_year) &
-            (df['ARTStartDate'].dt.to_period('M') < last_6mths) &
+            (df['ARTStartDate'].dt.to_period('M') <= last_6mths) &
             (df['CurrentViralLoad'] < 1000)
         ].copy()
 
