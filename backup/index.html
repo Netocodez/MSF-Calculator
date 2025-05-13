@@ -21,10 +21,10 @@
         </div>
         <br>
         <h2>Select Current Reporting Period ART Line List (Required)</h2>
-        <input type="file" id="fileInput" name="file1" accept=".xlsx,.xls,.csv" />
+        <input type="file" id="fileInput" name="file1" accept=".xlsx,.xls" />
         <br><br>
         <h2>Select Previous Reporting Period ART Line List (Recommended)</h2>
-        <input type="file" id="fileInput2" name="file2" accept=".xlsx,.xls,.csv" />
+        <input type="file" id="fileInput2" name="file2" accept=".xlsx,.xls" />
         
         <div id="uploadMessage"></div>
         <br><br>
@@ -61,14 +61,14 @@
                     return;
                 }
 
-                const allowedExtensions = /(\.xlsx|\.xls|\.csv)$/i;
+                const allowedExtensions = /(\.xlsx|\.xls)$/i;
                 if (!allowedExtensions.exec(file1.name)) {
-                    $("#message").text("Current ART Line List must be an Excel file or csv (.xlsx, .xls or csv).").addClass("errmessage");
+                    $("#message").text("Current ART Line List must be an Excel file (.xlsx or .xls).").addClass("errmessage");
                     return;
                 }
 
                 if (file2 && !allowedExtensions.exec(file2.name)) {
-                    $("#message").text("Baseline ART Line List must be an Excel file or csv (.xlsx, .xls or csv).").addClass("errmessage");
+                    $("#message").text("Baseline ART Line List must be an Excel file (.xlsx or .xls).").addClass("errmessage");
                     return;
                 }
 

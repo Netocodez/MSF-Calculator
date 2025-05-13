@@ -11,100 +11,47 @@ from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.styles import Font, Alignment, PatternFill
 
-# Flask app
+
+#Period = pd.to_datetime('2025-04-30').to_period('M')
+# Convert to proper month-year format
+formatted_period = None
+
 app = Flask(__name__)
 
-# Configuration
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-ALLOWED_EXTENSIONS = {'.xlsx', '.xls', '.csv'}
-
-# Global variable for formatted reporting period
-formatted_period = None
-
-# Columns
-DATE_COLUMNS = [
-    'DateConfirmedHIV+', 'ARTStartDate', 'Pharmacy_LastPickupdate', 'Pharmacy_LastPickupdate_PreviousQuarter',
-    'DateofCurrentViralLoad', 'DateResultReceivedFacility', 'LastDateOfSampleCollection', 'Outcomes_Date',
-    'IIT_Date', 'DOB', 'Date_Transfered_In', 'DateofFirstTLD_Pickup', 'EstimatedNextAppointmentPharmacy',
-    'Next_Ap_by_careCard', 'IPT_Screening_Date', 'First_TPT_Pickupdate', 'Last_TPT_Pickupdate',
-    'Current_TPT_Received', 'Date_of_TPT_Outcome', 'DateofCurrent_TBStatus', 'TB_Treatment_Start_Date',
-    'TB_Treatment_Stop_Date', 'Date_Enrolled_Into_OTZ', 'Date_Enrolled_Into_OTZ_Plus',
-    'PBS_Capture_Date', 'Date_Generated', 'PBS_Recapture_Date'
-]
-
-NUMERIC_COLUMNS = [
-    'AgeAtStartofART', 'AgeinMonths', 'DaysOnART', 'DaysOfARVRefill', 'CurrentViralLoad',
-    'Current_Age', 'Weight', 'Height', 'BMI', 'Whostage', 'CurrentCD4', 'Days_To_Schedule'
-]
-
-# Logging
+# Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
-# Utility: check file extension
-def is_allowed_file(filename):
-    return os.path.splitext(filename)[1].lower() in ALLOWED_EXTENSIONS
-
-
-# Utility: parse individual date
+#function for cleaning and formating dates 
 def parse_date(date):
-    if pd.isna(date):
+
+    if pd.isna(date):  # Handle NaN values
         return pd.NaT
-    if isinstance(date, (pd.Timestamp, pd.DatetimeIndex)):
-        return date
-    if isinstance(date, (int, float)):
-        if date > 59:
-            try:
-                return pd.to_datetime(date, origin='1899-12-30', unit='D').date()
-            except Exception:
-                return pd.NaT
-    date_str = str(date).strip()
-    if date_str.lower() in ['nan', 'null', 'n/a', '', '--']:
-        return pd.NaT
-    date_formats = [
-        "%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y",
-        "%d-%m-%Y", "%m-%d-%Y", "%Y.%m.%d", "%Y-%b-%d"
-    ]
+    
+    if isinstance(date, pd.Timestamp):  # If already a datetime object
+        return date.date()
+    
+    if isinstance(date, (int, float)):  # Handle Excel serial numbers
+        try:
+            return pd.to_datetime(date, origin='1899-12-30', unit='D').date()
+        except Exception:
+            return pd.NaT
+
+    date_formats = ["%Y-%m-%d", "%d/%m/%Y", "%m-%d-%Y", "%d-%m-%Y", "%Y.%m.%d", "%Y-%b-%d"]
+
     for fmt in date_formats:
         try:
-            return pd.to_datetime(date_str, format=fmt)
+            return pd.to_datetime(date, format=fmt).date()
         except (ValueError, TypeError):
             continue
+
     try:
-        return parser.parse(date_str, fuzzy=True, ignoretz=True)
-    except Exception:
+        return parser.parse(str(date), fuzzy=True, ignoretz=True).date()
+    except (parser.ParserError, ValueError, TypeError):
         return pd.NaT
-
-
-# Utility: load file (CSV or Excel)
-def load_file(file):
-    file_ext = os.path.splitext(file.filename)[1].lower()
-    if file_ext == '.csv':
-        return pd.read_csv(
-            file,
-            encoding='utf-8',
-            lineterminator='\n',
-            quotechar='"',
-            escapechar='\\',
-            skip_blank_lines=True
-        )
-    elif file_ext in ['.xls', '.xlsx']:
-        return pd.read_excel(file, sheet_name=0, dtype=object)
-    else:
-        raise ValueError("Unsupported file type")
-
-
-# Utility: clean dates and numbers
-def clean_dataframe(df):
-    for col in DATE_COLUMNS:
-        if col in df.columns:
-            df[col] = df[col].apply(parse_date)
-    for col in NUMERIC_COLUMNS:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-    return df
 
 
 @app.route('/')
@@ -114,31 +61,31 @@ def home():
 @app.route('/fetch', methods=['POST'])
 def fetch_data():
     
-    file1 = request.files.get("file1")
-    file2 = request.files.get("file2")
+    if "file1" not in request.files:
+        return jsonify({"message": "Current ART Line list (file1) is required."}), 400
 
-    if not file1 or not is_allowed_file(file1.filename):
-        return jsonify({"message": "Current ART Line List must be a CSV or Excel file."}), 400
+    file1 = request.files["file1"]
+    file2 = request.files.get("file2")  # May be None
 
-    if file2 and not is_allowed_file(file2.filename):
-        return jsonify({"message": "Baseline ART Line List must be a CSV or Excel file."}), 400
+    # Validate file1 presence and type
+    if not file1 or not file1.filename.endswith((".xlsx", ".xls")):
+        return jsonify({"message": "Current ART Line List must be an Excel file (.xlsx or .xls)."}), 400
+
+    # Validate file2 only if provided
+    if file2 and not file2.filename.endswith((".xlsx", ".xls")):
+        return jsonify({"message": "Baseline ART Line List must be an Excel file (.xlsx or .xls)."}), 400
 
     try:
-        # Load and clean current ART line list
-        df = load_file(file1)
-        df = clean_dataframe(df)
-
-        # Merge baseline ART data if provided
+        df = pd.read_excel(file1)
+        #df.to_excel('df.xlsx')
         if file2:
-            df_baseline = load_file(file2)
-            if 'uuid' in df.columns and 'uuid' in df_baseline.columns and 'CurrentARTStatus' in df_baseline.columns:
-                df = df.merge(
-                    df_baseline[['uuid', 'CurrentARTStatus']],
-                    on='uuid', how='left', suffixes=('', '_baseline')
-                )
-                df['ARTStatus_PreviousQuarter'] = df['CurrentARTStatus_baseline']
+            dfBaseline = pd.read_excel(file2, sheet_name=0)
+            df = df.merge(dfBaseline[['uuid', 'CurrentARTStatus']], on='uuid', how='left', suffixes=('', '_baseline'))
+            df['ARTStatus_PreviousQuarter'] = df['CurrentARTStatus_baseline']
+            #df.to_excel("merged2.xlsx")
 
         # Read start and end dates from form data
+        #start_date = request.form.get("startDate")
         end_date = request.form.get("endDate")
 
         global formatted_period
@@ -147,7 +94,7 @@ def fetch_data():
             formatted_period = end_date.to_period('M').strftime('%B %Y')
             Period = end_date.to_period('M')  # Add this line
 
-        #data processing logic here...
+        # ...your data processing logic here...
         bins = [0, 0.99, 4, 9, 14, 19, 24, 29, 34, 39, 44, 49, 54, 59, 64, float('inf')]
         labels = ['<1', '1-4', '5-9', '10-14', '15-19', '20-24', '25-29', '30-34', 
                 '35-39', '40-44', '45-49', '50-54', '55-59', '60-64', '65+']
@@ -155,13 +102,27 @@ def fetch_data():
         bins2 = [0, 14, float('inf')]
         labels2 = ['<15', '>=15']
 
+        #df = pd.read_excel("df2.xlsx", sheet_name=0)
         # Extract unique facility names as a list
         unique_facilities = df['FacilityName'].unique()
         facilities_text = ', '.join(unique_facilities)
         print(facilities_text)
+        
+        #Convert Date Objects to Date using dateutil
+        dfDates = ['DateConfirmedHIV+', 'ARTStartDate', 'Pharmacy_LastPickupdate', 'Pharmacy_LastPickupdate_PreviousQuarter', 'DateofCurrentViralLoad', 'DateResultReceivedFacility', 'LastDateOfSampleCollection', 'Outcomes_Date', 'IIT_Date', 'DOB', 'Date_Transfered_In', 'DateofFirstTLD_Pickup', 'EstimatedNextAppointmentPharmacy', 'Next_Ap_by_careCard', 'IPT_Screening_Date', 'First_TPT_Pickupdate', 'Last_TPT_Pickupdate', 'Current_TPT_Received', 'Date_of_TPT_Outcome', 'DateofCurrent_TBStatus', 'TB_Treatment_Start_Date', 'TB_Treatment_Stop_Date', 'Date_Enrolled_Into_OTZ', 'Date_Enrolled_Into_OTZ_Plus', 'PBS_Capture_Date', 'Date_Generated', 'PBS_Recapture_Date']
+        for col in dfDates:
+            df[col] = df[col].apply(parse_date)
+            
+        #Clean numbers
+        dfnumeric = ['AgeAtStartofART', 'AgeinMonths', 'DaysOnART', 'DaysOfARVRefill', 'CurrentViralLoad', 'Current_Age', 'Weight', 'Height', 'BMI', 'Whostage', 'CurrentCD4', 'Days_To_Schedule']
+        for col in dfnumeric:
+            df[col] = pd.to_numeric(df[col],errors='coerce')
+
+        # Ensure the DOB column is in datetime format
+        df['DOB'] = pd.to_datetime(df['DOB'], errors='coerce')  # 'coerce' will turn invalid dates into NaT (Not a Time)
 
         # Calculate age by subtracting DOB from today's date and dividing by 365.25 for leap years
-        today = pd.to_datetime(end_date)  # Get the current date
+        today = pd.to_datetime('today')  # Get the current date
         df['Age'] = (today - df['DOB']).dt.days / 365.25  # Convert the difference to years
 
         df['Age Band'] = pd.cut(df['Age'], bins=bins, labels=labels)
@@ -191,6 +152,8 @@ def fetch_data():
         
         
         #ART 2 (Newly Started on ART
+        # Ensure ARTStartDate is in datetime format
+        df['ARTStartDate'] = pd.to_datetime(df['ARTStartDate'])
 
         # Filter only active clients
         df_TxNew = df[df['ARTStartDate'].dt.to_period('M') == Period].copy()
@@ -332,6 +295,8 @@ def fetch_data():
         
         
         #ART 5 (Current on ART)
+        df['Pharmacy_LastPickupdate'] = pd.to_datetime(df['Pharmacy_LastPickupdate'])
+
         # Ensure the 'Pharmacy_LastPickupdate' column is in datetime format and fill NaNs with a specific date
         df['Pharmacy_LastPickupdate2'] = pd.to_datetime(df['Pharmacy_LastPickupdate'], errors='coerce').fillna(pd.to_datetime('1900'))
 
@@ -401,6 +366,7 @@ def fetch_data():
         
         #ART 6 (VL Routine)
         # Filter only active clients
+        df['DateResultReceivedFacility'] = pd.to_datetime(df['DateResultReceivedFacility'])
         df['ARTStartDate'] = pd.to_datetime(df['ARTStartDate'])
 
         df_VL = df[
@@ -548,7 +514,9 @@ def fetch_data():
         VLTargeted_Sup
         
         
+        #added
         #ART 8 (Restart)
+        df['Date_Transfered_In'] = pd.to_datetime(df['Date_Transfered_In'])
         df['ARTStartDate'] = pd.to_datetime(df['ARTStartDate'])
 
         # Filter only active clients
@@ -576,6 +544,8 @@ def fetch_data():
         
         
         #ART 9 (Transfer In)
+        df['Date_Transfered_In'] = pd.to_datetime(df['Date_Transfered_In'])
+
         # Filter only active clients
         df_TI = df[(df['CurrentARTStatus'] == "Active")].copy()
 
@@ -601,6 +571,8 @@ def fetch_data():
         
         
         #ART 10 (TB Screening Newly Initiated on ART)
+        df['ARTStartDate'] = pd.to_datetime(df['ARTStartDate'])
+
         # Filter only active clients
         df_TBScrn = df[(df['CurrentARTStatus'] == "Active") & 
                     (df['DateofCurrent_TBStatus'].notna())].copy()
@@ -625,6 +597,8 @@ def fetch_data():
         
         
         #ART 10b (TB Screening Previously on ART)
+        df['Pharmacy_LastPickupdate'] = pd.to_datetime(df['Pharmacy_LastPickupdate'])
+
         # Filter only active clients
         df_TBScrnPrev = df[(df['CurrentARTStatus'] == "Active") & 
                     (df['DateofCurrent_TBStatus'].notna()) &
