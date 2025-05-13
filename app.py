@@ -48,34 +48,50 @@ def is_allowed_file(filename):
     return os.path.splitext(filename)[1].lower() in ALLOWED_EXTENSIONS
 
 
-# Utility: parse individual date
+# Utility: Parse individual date
 def parse_date(date):
-    if pd.isna(date):
+    # Handle NaT and empty values early to minimize checks
+    if pd.isna(date) or str(date).strip().lower() in ['nan', 'null', 'n/a', '', '--']:
         return pd.NaT
+
+    # If it's already a valid Timestamp, return it directly
     if isinstance(date, (pd.Timestamp, pd.DatetimeIndex)):
         return date
+
+    # Handle numeric dates (Excel-style dates, e.g., 43831)
     if isinstance(date, (int, float)):
-        if date > 59:
+        if date > 59:  # Excel dates start from 1900, so 59 is a safe lower limit
             try:
                 return pd.to_datetime(date, origin='1899-12-30', unit='D').date()
             except Exception:
-                return pd.NaT
+                return pd.NaT  # Return NaT if parsing fails
+
+    # Convert to string and check against predefined formats
     date_str = str(date).strip()
-    if date_str.lower() in ['nan', 'null', 'n/a', '', '--']:
-        return pd.NaT
+    
+    # Use pd.to_datetime for direct date parsing
+    try:
+        return pd.to_datetime(date_str, errors='coerce')
+    except ValueError:
+        pass
+
+    # If simple parsing fails, attempt with known formats
     date_formats = [
         "%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y",
         "%d-%m-%Y", "%m-%d-%Y", "%Y.%m.%d", "%Y-%b-%d"
     ]
     for fmt in date_formats:
         try:
-            return pd.to_datetime(date_str, format=fmt)
-        except (ValueError, TypeError):
+            return pd.to_datetime(date_str, format=fmt, errors='coerce')
+        except ValueError:
             continue
+
+    # Fallback to fuzzy parsing if all else fails
     try:
         return parser.parse(date_str, fuzzy=True, ignoretz=True)
     except Exception:
         return pd.NaT
+
 
 
 # Utility: load file (CSV or Excel)
