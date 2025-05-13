@@ -50,46 +50,30 @@ def is_allowed_file(filename):
 
 # Utility: Parse individual date
 def parse_date(date):
-    # Handle NaT and empty values early to minimize checks
-    if pd.isna(date) or str(date).strip().lower() in ['nan', 'null', 'n/a', '', '--']:
+
+    if pd.isna(date):  # Handle NaN values
         return pd.NaT
-
-    # If it's already a valid Timestamp, return it directly
-    if isinstance(date, (pd.Timestamp, pd.DatetimeIndex)):
-        return date
-
-    # Handle numeric dates (Excel-style dates, e.g., 43831)
-    if isinstance(date, (int, float)):
-        if date > 59:  # Excel dates start from 1900, so 59 is a safe lower limit
-            try:
-                return pd.to_datetime(date, origin='1899-12-30', unit='D').date()
-            except Exception:
-                return pd.NaT  # Return NaT if parsing fails
-
-    # Convert to string and check against predefined formats
-    date_str = str(date).strip()
     
-    # Use pd.to_datetime for direct date parsing
-    try:
-        return pd.to_datetime(date_str, errors='coerce')
-    except ValueError:
-        pass
+    if isinstance(date, pd.Timestamp):  # If already a datetime object
+        return date.date()
+    
+    if isinstance(date, (int, float)):  # Handle Excel serial numbers
+        try:
+            return pd.to_datetime(date, origin='1899-12-30', unit='D').date()
+        except Exception:
+            return pd.NaT
 
-    # If simple parsing fails, attempt with known formats
-    date_formats = [
-        "%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y",
-        "%d-%m-%Y", "%m-%d-%Y", "%Y.%m.%d", "%Y-%b-%d"
-    ]
+    date_formats = ["%Y-%m-%d", "%d/%m/%Y", "%m-%d-%Y", "%d-%m-%Y", "%Y.%m.%d", "%Y-%b-%d"]
+
     for fmt in date_formats:
         try:
-            return pd.to_datetime(date_str, format=fmt, errors='coerce')
-        except ValueError:
+            return pd.to_datetime(date, format=fmt).date()
+        except (ValueError, TypeError):
             continue
 
-    # Fallback to fuzzy parsing if all else fails
     try:
-        return parser.parse(date_str, fuzzy=True, ignoretz=True)
-    except Exception:
+        return parser.parse(str(date), fuzzy=True, ignoretz=True).date()
+    except (parser.ParserError, ValueError, TypeError):
         return pd.NaT
 
 
