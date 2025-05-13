@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MSF CALCULATOR</title>
+    <link rel="stylesheet" href="static/style.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>ANSO REPORT GENERATOR</h1>
+        <h2>Ensuring Real Time Quality and Consistent Data!</h2>
+
+        <div class="date-picker-group">
+            <!--<label for="startDate">Start Date:</label>
+            <input type="date" id="startDate" name="startDate">-->
+            <br>
+            <label for="endDate">Select Reporting Period:</label>
+            <input type="month" id="endDate" name="endDate">
+        </div>
+        <br>
+        <h2>Select Current Reporting Period ART Line List (Required)</h2>
+        <input type="file" id="fileInput" name="file1" accept=".xlsx,.xls,.csv" />
+        <br><br>
+        <h2>Select Previous Reporting Period ART Line List (Recommended)</h2>
+        <input type="file" id="fileInput2" name="file2" accept=".xlsx,.xls,.csv" />
+        
+        <div id="uploadMessage"></div>
+        <br><br>
+
+        <div class="button-group">
+            <button id="fetchData">ART LINE LIST TO ART MSF</button>
+            <!-- <button id="fetchIHVN">IHVN MSF Data Validation</button> -->
+            <!-- <button id="fetchAHNI">IHVN Vs NDARS MSF Data Concurrence</button> -->
+        </div>
+
+        <div id="loading" class="hidden">Fetching and Analyzing data, please wait...</div>
+        <div id="message"></div>
+
+        <a id="downloadLinkgray" class="hidden" href="#" target="_blank">Download File</a>
+    </div>
+
+    <script>
+        const today = new Date();
+        today.setMonth(today.getMonth() - 1); // Go to last month
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0'); // Add leading zero
+        document.getElementById('endDate').value = `${year}-${month}`;
+
+        $(document).ready(function () {
+            $("#fetchData").click(function () {
+                const fileInput1 = $("#fileInput")[0];
+                const fileInput2 = $("#fileInput2")[0];
+                const file1 = fileInput1.files[0];
+                const file2 = fileInput2.files[0];
+                const endDate = $("#endDate").val();
+
+                if (!file1) {
+                    $("#message").text("Please select Current ART Line List Excel file.").addClass("errmessage");
+                    return;
+                }
+
+                const allowedExtensions = /(\.xlsx|\.xls|\.csv)$/i;
+                if (!allowedExtensions.exec(file1.name)) {
+                    $("#message").text("Current ART Line List must be an Excel file or csv (.xlsx, .xls or csv).").addClass("errmessage");
+                    return;
+                }
+
+                if (file2 && !allowedExtensions.exec(file2.name)) {
+                    $("#message").text("Baseline ART Line List must be an Excel file or csv (.xlsx, .xls or csv).").addClass("errmessage");
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append("file1", file1);
+                if (file2) {
+                    formData.append("file2", file2); // Only append if it exists
+                }
+                formData.append("endDate", endDate);
+
+                $("#loading").removeClass("hidden");
+                $("#message").text("");
+                $("#uploadMessage").text("");
+
+                $.ajax({
+                    url: "/fetch",
+                    type: "POST",
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function (response) {
+                        $("#loading").addClass("hidden");
+                        $("#message").text(response.message).addClass("message");
+
+                        if (response.download_url) {
+                            $("#downloadLinkgray")
+                                .attr("href", response.download_url)
+                                .removeClass("hidden")
+                                .removeClass("downloadLinkgray")
+                                .addClass("downloadLink");
+                        }
+                    },
+                    error: function () {
+                        $("#loading").addClass("hidden");
+                        $("#message").text("Error fetching and processing data.").addClass("errmessage");
+                    }
+                });
+            });
+
+        });
+    </script>
+</body>
+</html>

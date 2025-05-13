@@ -55,11 +55,11 @@ def parse_date(date):
         return pd.NaT
     
     if isinstance(date, pd.Timestamp):  # If already a datetime object
-        return date
+        return date.date()
     
     if isinstance(date, (int, float)):  # Handle Excel serial numbers
         try:
-            return pd.to_datetime(date, origin='1899-12-30', unit='D')
+            return pd.to_datetime(date, origin='1899-12-30', unit='D').date()
         except Exception:
             return pd.NaT
 
@@ -67,12 +67,12 @@ def parse_date(date):
 
     for fmt in date_formats:
         try:
-            return pd.to_datetime(date, format=fmt)
+            return pd.to_datetime(date, format=fmt).date()
         except (ValueError, TypeError):
             continue
 
     try:
-        return parser.parse(str(date), fuzzy=True, ignoretz=True)
+        return parser.parse(str(date), fuzzy=True, ignoretz=True).date()
     except (parser.ParserError, ValueError, TypeError):
         return pd.NaT
 
