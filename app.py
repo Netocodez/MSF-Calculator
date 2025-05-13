@@ -31,7 +31,7 @@ DATE_COLUMNS = [
     'Next_Ap_by_careCard', 'IPT_Screening_Date', 'First_TPT_Pickupdate', 'Last_TPT_Pickupdate',
     'Current_TPT_Received', 'Date_of_TPT_Outcome', 'DateofCurrent_TBStatus', 'TB_Treatment_Start_Date',
     'TB_Treatment_Stop_Date', 'Date_Enrolled_Into_OTZ', 'Date_Enrolled_Into_OTZ_Plus',
-    'PBS_Capture_Date', 'Date_Generated', 'PBS_Recapture_Date'
+    'PBS_Capture_Date', 'PBS_Recapture_Date'
 ]
 
 NUMERIC_COLUMNS = [
