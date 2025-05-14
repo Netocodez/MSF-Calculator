@@ -55,7 +55,7 @@ def parse_date(date):
         return pd.NaT
     
     if isinstance(date, pd.Timestamp):  # If already a datetime object
-        return date
+        return date if 1900 <= date.year <= 2099 else pd.NaT
     
     if isinstance(date, (int, float)):  # Handle Excel serial numbers
         try:
@@ -140,6 +140,11 @@ def fetch_data():
 
         # Read start and end dates from form data
         end_date = request.form.get("endDate")
+        
+        #Reformating major columns required in the analysis to datetime format
+        for col in ['DOB', 'ARTStartDate', 'Pharmacy_LastPickupdate', 'DateResultReceivedFacility', 'Date_Transfered_In']:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], errors='coerce')
 
         global formatted_period
         if end_date:
