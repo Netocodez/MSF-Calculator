@@ -414,7 +414,10 @@ def fetch_data():
             (df['ARTStartDate'].dt.to_period('M') <= last_6mths)
         ].copy()
 
-        df_VL.loc[:, 'VLRoutine'] = df_VL['ViralLoadIndication'].apply(lambda x: 1 if (x in ['Normal priority (status)', 'Initial', 'PMTCT, 32 - 36 weeks gestation']) or pd.isna(x) else 0)
+        #df_VL.loc[:, 'VLRoutine'] = df_VL['ViralLoadIndication'].apply(lambda x: 1 if (x in ['Normal priority (status)', 'Initial', 'PMTCT, 32 - 36 weeks gestation']) or pd.isna(x) else 0)
+        df_VL['VLRoutine'] = df_VL['ViralLoadIndication'].apply(
+            lambda x: 1 if pd.isna(x) or str(x) in ['Normal priority (status)', 'Initial', 'PMTCT, 32 - 36 weeks gestation'] else 0
+        )
         df_VL.loc[:, 'VLTargeted'] = df_VL['ViralLoadIndication'].apply(lambda x: 1 if x in ['Repeat', 'Confirmation', 'Immunologic failure', 'Clinical failure'] else 0)
 
 
@@ -488,7 +491,10 @@ def fetch_data():
             (df['CurrentViralLoad'] < 1000)
         ].copy()
 
-        df_VL_Sup.loc[:, 'VLRoutine_Sup'] = df_VL_Sup['ViralLoadIndication'].apply(lambda x: 1 if (x in ['Normal priority (status)', 'Initial', 'PMTCT, 32 - 36 weeks gestation']) or pd.isna(x) else 0)
+        #df_VL_Sup.loc[:, 'VLRoutine_Sup'] = df_VL_Sup['ViralLoadIndication'].apply(lambda x: 1 if (x in ['Normal priority (status)', 'Initial', 'PMTCT, 32 - 36 weeks gestation']) or pd.isna(x) else 0)
+        df_VL_Sup.loc[:, 'VLRoutine_Sup'] = df_VL_Sup['ViralLoadIndication'].apply(
+            lambda x: 1 if pd.isna(x) or str(x) in ['Normal priority (status)', 'Initial', 'PMTCT, 32 - 36 weeks gestation'] else 0
+        )
         df_VL_Sup.loc[:, 'VLTargeted_Sup'] = df_VL_Sup['ViralLoadIndication'].apply(lambda x: 1 if x in ['Repeat', 'Confirmation', 'Immunologic failure', 'Clinical failure'] else 0)
 
 
