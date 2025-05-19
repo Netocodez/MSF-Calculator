@@ -56,6 +56,13 @@ def is_allowed_file(filename):
 
 # Utility: Parse individual date
 def parse_date(date):
+    
+    # Handle if date is a list or array: try first element or return NaT if empty
+    if isinstance(date, (list, tuple, np.ndarray)):
+        if len(date) > 0:
+            date = date[0]
+        else:
+            return pd.NaT
 
     if pd.isna(date):  # Handle NaN values
         return pd.NaT
