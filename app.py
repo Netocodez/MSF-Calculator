@@ -53,7 +53,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 def is_allowed_file(filename):
     return os.path.splitext(filename)[1].lower() in ALLOWED_EXTENSIONS
 
-
+"""
 # Utility: Parse individual date
 def parse_date(date):
     
@@ -88,6 +88,7 @@ def parse_date(date):
         return parser.parse(str(date), fuzzy=True, ignoretz=True)
     except (parser.ParserError, ValueError, TypeError):
         return pd.NaT
+"""
 
 
 
@@ -109,7 +110,7 @@ def load_file(file):
     else:
         raise ValueError("Unsupported file type")
 
-
+"""
 # Utility: clean dates and numbers
 def clean_dataframe(df):
     for col in DATE_COLUMNS:
@@ -119,6 +120,7 @@ def clean_dataframe(df):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
     return df
+"""
 
 
 @app.route('/')
@@ -141,7 +143,7 @@ def fetch_data():
         try:
             # Load and clean current ART line list
             df = load_file(file1)
-            df = clean_dataframe(df)
+            #df = clean_dataframe(df)
 
             # Merge baseline ART data if provided
             if file2:
@@ -154,14 +156,16 @@ def fetch_data():
                     df['ARTStatus_PreviousQuarter'] = df['CurrentARTStatus_baseline']
                     
             #df.to_excel('df.xlsx')
+            for col in DATE_COLUMNS:
+                if col in df.columns:
+                    df[col] = pd.to_datetime(df[col], errors='coerce')
+                    
+            for col in NUMERIC_COLUMNS:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
 
             # Read start and end dates from form data
             end_date = request.form.get("endDate")
-            
-            #Reformating major columns required in the analysis to datetime format
-            for col in ['DOB', 'ARTStartDate', 'Pharmacy_LastPickupdate', 'DateResultReceivedFacility', 'Date_Transfered_In', 'Outcomes_Date', 'DateofCurrent_TBStatus']:
-                if col in df.columns:
-                    df[col] = pd.to_datetime(df[col], errors='coerce')
 
             global formatted_period
             if end_date:
