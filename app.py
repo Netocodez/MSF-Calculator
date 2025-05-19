@@ -158,7 +158,7 @@ def fetch_data():
             #df.to_excel('df.xlsx')
             for col in DATE_COLUMNS:
                 if col in df.columns:
-                    df[col] = pd.to_datetime(df[col], errors='coerce')
+                    df[col] = pd.to_datetime(df[col], errors='coerce', dayfirst=True)
                     
             for col in NUMERIC_COLUMNS:
                 if col in df.columns:
