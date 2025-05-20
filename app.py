@@ -93,7 +93,7 @@ def parse_date(date):
 
 
 # Utility: load file (CSV or Excel)
-def load_file(file):
+def load_file(file, columns_to_read=None):
     file_ext = os.path.splitext(file.filename)[1].lower()
     if file_ext == '.csv':
         return pd.read_csv(
@@ -142,12 +142,12 @@ def fetch_data():
     try:
         try:
             # Load and clean current ART line list
-            df = load_file(file1)
+            df = load_file(file1, columns_to_read=columns_to_read)
             #df = clean_dataframe(df)
 
             # Merge baseline ART data if provided
             if file2:
-                df_baseline = load_file(file2)
+                df_baseline = load_file(file2, columns_to_read=b_columns_to_read)
                 if 'uuid' in df.columns and 'uuid' in df_baseline.columns and 'CurrentARTStatus' in df_baseline.columns:
                     df = df.merge(
                         df_baseline[['uuid', 'CurrentARTStatus']],
