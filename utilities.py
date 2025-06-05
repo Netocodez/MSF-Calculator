@@ -71,7 +71,7 @@ def process_emr_data(df, dfbaseline, emr_df):
         how='left',
         suffixes=('', '_baseline')
     )
-    #df.to_excel('df.xlsx')
+    df.to_excel('df.xlsx')
 
     # Fill missing TPT values
     df['Date of TPT Start (yyyy-mm-dd)'] = pd.to_datetime(df['Date of TPT Start (yyyy-mm-dd)'], errors='coerce', dayfirst=True)
@@ -80,3 +80,52 @@ def process_emr_data(df, dfbaseline, emr_df):
     df['Current_TPT_Received'] = df['Current_TPT_Received'].fillna(df['TPT Type'])
 
     return df
+
+"""
+# Utility: Parse individual date
+def parse_date(date):
+    
+    # Handle if date is a list or array: try first element or return NaT if empty
+    if isinstance(date, (list, tuple, np.ndarray)):
+        if len(date) > 0:
+            date = date[0]
+        else:
+            return pd.NaT
+
+    if pd.isna(date):  # Handle NaN values
+        return pd.NaT
+    
+    if isinstance(date, pd.Timestamp):  # If already a datetime object
+        return date if 1900 <= date.year <= 2099 else pd.NaT
+    
+    if isinstance(date, (int, float)):  # Handle Excel serial numbers
+        try:
+            return pd.to_datetime(date, origin='1899-12-30', unit='D')
+        except Exception:
+            return pd.NaT
+
+    date_formats = ["%Y-%m-%d", "%d/%m/%Y", "%m-%d-%Y", "%d-%m-%Y", "%Y.%m.%d", "%Y-%b-%d"]
+
+    for fmt in date_formats:
+        try:
+            return pd.to_datetime(date, format=fmt)
+        except (ValueError, TypeError):
+            continue
+
+    try:
+        return parser.parse(str(date), fuzzy=True, ignoretz=True)
+    except (parser.ParserError, ValueError, TypeError):
+        return pd.NaT
+"""
+
+"""
+# Utility: clean dates and numbers
+def clean_dataframe(df):
+    for col in DATE_COLUMNS:
+        if col in df.columns:
+            df[col] = df[col].apply(parse_date)
+    for col in NUMERIC_COLUMNS:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+    return df
+"""
