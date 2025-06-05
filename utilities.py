@@ -11,18 +11,29 @@ def clean_id(val):
 def process_emr_data(df, dfbaseline, emr_df):
     # Remove rows with any blank fields in mapping
     emr_df = emr_df[(emr_df != '').all(axis=1)]
+    
+    # Select and deduplicate necessary columns from emr_df
+    emr_subset = emr_df[['Name on NMRS', 'LGA', 'STATE', 'Name on Lamis']].drop_duplicates(subset='Name on NMRS')
 
-    # Map LGA, STATE, and LAMIS facility name to current df
-    df['LGA2'] = df['FacilityName'].map(emr_df.set_index('Name on NMRS')['LGA'])
-    df['STATE2'] = df['FacilityName'].map(emr_df.set_index('Name on NMRS')['STATE'])
-    df['Name on Lamis'] = df['FacilityName'].map(emr_df.set_index('Name on NMRS')['Name on Lamis'])
+    # Merge once using FacilityName <-> Name on NMRS
+    df = df.merge(
+        emr_subset,
+        how='left',
+        left_on='FacilityName',
+        right_on='Name on NMRS',
+        suffixes=('', '_emr')
+    )
 
-    # Fill missing LGA/State and correct facility names
-    df.loc[df['LGA'].isna(), 'LGA'] = df['LGA2']
-    df.loc[df['State'].isna(), 'State'] = df['STATE2']
+    # Fill missing LGA and State from EMR
+    df['LGA'] = df['LGA'].fillna(df['LGA_emr'])
+    df['State'] = df['State'].fillna(df['STATE'])
+
+    # Replace FacilityName if different
     df.loc[df['Name on Lamis'] != df['FacilityName'], 'FacilityName'] = df['Name on Lamis']
 
-    df.drop(['LGA2', 'STATE2', 'Name on Lamis'], axis=1, inplace=True)
+    # Drop extra columns
+    df.drop(['Name on NMRS', 'LGA_emr', 'STATE', 'Name on Lamis'], axis=1, inplace=True)
+
 
     # Normalize hospital numbers and unique IDs
     df['PatientHospitalNo1'] = df['PatientHospitalNo'].apply(clean_id)
@@ -53,13 +64,6 @@ def process_emr_data(df, dfbaseline, emr_df):
     #alphabet = dict(enumerate(string.ascii_uppercase))
     #df.loc[dup_mask, 'unique identifiers'] += '_' + df[dup_mask].groupby(['unique identifiers']).cumcount().map(alphabet)
 
-    # Map TPT values from baseline to current df
-    #df['Radet_Date of TPT Start (yyyy-mm-dd)'] = df['unique identifiers'].map(dfbaseline.set_index('unique identifiers')['Date of TPT Start (yyyy-mm-dd)'])
-    #df['Radet_TPT Type'] = df['unique identifiers'].map(dfbaseline.set_index('unique identifiers')['TPT Type'])
-
-    # Merge only necessary columns from baseline
-    #tpt_info = dfbaseline[['unique identifiers', 'Date of TPT Start (yyyy-mm-dd)', 'TPT Type']]
-
     # Merge into df
     df = df.merge(
         dfbaseline[['unique identifiers', 'Date of TPT Start (yyyy-mm-dd)', 'TPT Type']],
@@ -70,6 +74,8 @@ def process_emr_data(df, dfbaseline, emr_df):
     #df.to_excel('df.xlsx')
 
     # Fill missing TPT values
+    df['Date of TPT Start (yyyy-mm-dd)'] = pd.to_datetime(df['Date of TPT Start (yyyy-mm-dd)'], errors='coerce', dayfirst=True)
+    df['First_TPT_Pickupdate'] = pd.to_datetime(df['First_TPT_Pickupdate'], errors='coerce', dayfirst=True)
     df['First_TPT_Pickupdate'] = df['First_TPT_Pickupdate'].fillna(df['Date of TPT Start (yyyy-mm-dd)'])
     df['Current_TPT_Received'] = df['Current_TPT_Received'].fillna(df['TPT Type'])
 

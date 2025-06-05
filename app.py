@@ -43,7 +43,7 @@ r_columns_to_read = [
 # Columns
 DATE_COLUMNS = [
     'DOB', 'ARTStartDate', 'Pharmacy_LastPickupdate',
-    'DateResultReceivedFacility', 'Date_Transfered_In', 'Outcomes_Date', 'DateofCurrent_TBStatus'
+    'DateResultReceivedFacility', 'Date_Transfered_In', 'Outcomes_Date', 'DateofCurrent_TBStatus', 'First_TPT_Pickupdate'
 ]
 
 NUMERIC_COLUMNS = [
