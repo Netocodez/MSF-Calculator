@@ -8,55 +8,31 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
-    <body>
-    <button id="helpBtn" title="Help">?</button>
-    <div id="helpBox" class="hidden">
-        <h3>Help Guide</h3>
-        <ul>
-            <li><strong>Reporting Period</strong>: Select the current reporting period in review (e.g., 2025-05).</li>
-            <li><strong>Select one list at a time</strong>: Highly Recommended.</li>
-            <li><strong>Current ART Line List</strong>: Required for processing MSF report.</li>
-            <li><strong>Previous ART Line List</strong>: Optional, help to track status change better (Restart).</li>
-            <li><strong>Baseline RADET</strong>: Optional, help in merging missing TPT data from lamis Radet.</li>
-            <li>Ensure all files are in .xlsx, .xls, or .csv format.</li>
-            <li>Click "ART LINE LIST TO ART MSF" to generate report.</li>
-            <br>
-            
-        <p>For any issues, contact <a href="mailto:netocodes@gmail.com">netocodes@gmail.com </a>or call +2348134453841</p>
-        </ul>
-    </div>
     <div class="container">
         <h1>ANSO NMRS MSF REPORT GENERATOR</h1>
         <h2>Ensuring Real Time Quality and Consistent Data!</h2>
 
-        <div class="form-row">
-            <div class="form-group">
-                <label for="endDate"><p>Select Reporting Period:</p></label>
-                <input type="month" id="endDate" name="endDate">
-            </div>
+        <div class="date-picker-group">
+            <!--<label for="startDate">Start Date:</label>
+            <input type="date" id="startDate" name="startDate">-->
+            <br>
+            <label for="endDate">Select Reporting Period:</label>
+            <input type="month" id="endDate" name="endDate">
         </div>
-
-        <div class="form-row">
-            <div class="form-group">
-                <p>Current ART Line List For a Facility <span class="required">(Required)</span></p>
-                <input type="file" id="fileInput" name="file1" accept=".xlsx,.xls,.csv" />
-            </div>
-
-            <div class="form-group">
-                <p>Previous ART Line List (Recommended)</p>
-                <input type="file" id="fileInput2" name="file2" accept=".xlsx,.xls,.csv" />
-            </div>
-
-            <div class="form-group">
-                <p>Baseline Lamis RADET (Recommended)</p>
-                <input type="file" id="fileInput3" name="file3" accept=".xlsx,.xls,.csv" />
-            </div>
-        </div>
-
+        <br>
+        <h2>Select Current Reporting Period ART Line List For a Facility (Required)</h2>
+        <input type="file" id="fileInput" name="file1" accept=".xlsx,.xls,.csv" />
+        <br><br>
+        <h2>Select Prev Month ART Line List For a Facility (Recommended)</h2>
+        <input type="file" id="fileInput2" name="file2" accept=".xlsx,.xls,.csv" />
+        
         <div id="uploadMessage"></div>
+        <br><br>
 
         <div class="button-group">
             <button id="fetchData">ART LINE LIST TO ART MSF</button>
+            <!-- <button id="fetchIHVN">IHVN MSF Data Validation</button> -->
+            <!-- <button id="fetchAHNI">IHVN Vs NDARS MSF Data Concurrence</button> -->
         </div>
 
         <div id="loading" class="hidden">Fetching and Analyzing data, please wait...</div>
@@ -76,10 +52,8 @@
             $("#fetchData").click(function () {
                 const fileInput1 = $("#fileInput")[0];
                 const fileInput2 = $("#fileInput2")[0];
-                const fileInput3 = $("#fileInput3")[0];
                 const file1 = fileInput1.files[0];
                 const file2 = fileInput2.files[0];
-                const file3 = fileInput3.files[0];
                 const endDate = $("#endDate").val();
 
                 if (!file1) {
@@ -98,18 +72,10 @@
                     return;
                 }
 
-                if (file3 && !allowedExtensions.exec(file3.name)) {
-                    $("#message").text("Radet must be an Excel file or csv (.xlsx, .xls or csv).").addClass("errmessage");
-                    return;
-                }
-
                 const formData = new FormData();
                 formData.append("file1", file1);
                 if (file2) {
                     formData.append("file2", file2); // Only append if it exists
-                }
-                if (file3) {
-                    formData.append("file3", file3); // Only append if it exists
                 }
                 formData.append("endDate", endDate);
 
@@ -142,10 +108,6 @@
                 });
             });
 
-        });
-
-                $("#helpBtn").click(function () {
-            $("#helpBox").toggleClass("hidden");
         });
     </script>
 </body>

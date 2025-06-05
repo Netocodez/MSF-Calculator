@@ -10,7 +10,6 @@ import xlsxwriter
 from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.styles import Font, Alignment, PatternFill
-from utilities import process_emr_data
 
 # Flask app
 app = Flask(__name__)
@@ -26,18 +25,14 @@ formatted_period = None
 
 #columns to process
 columns_to_read = [
-    'State', 'LGA', 'FacilityName', 'PatientHospitalNo', 'PEPID', 'uuid', 'ARTStatus_PreviousQuarter','CurrentARTStatus', 'DOB', 'ARTStartDate', 'Pharmacy_LastPickupdate',
-    'DateResultReceivedFacility', 'Date_Transfered_In',
-    'CurrentPregnancyStatus', 'First_TPT_Pickupdate', 'Current_TPT_Received', 'Current_TB_Status', 'CurrentRegimenLine',
+    'uuid', 'CurrentARTStatus', 'ARTStatus_PreviousQuarter', 'DOB', 'ARTStartDate', 'Pharmacy_LastPickupdate',
+    'DateResultReceivedFacility', 'Date_Transfered_In', 'FacilityName',
+    'CurrentPregnancyStatus', 'Current_TB_Status', 'CurrentRegimenLine',
     'DaysOfARVRefill', 'DSD_Model', 'Sex', 'Outcomes_Date', 'CurrentViralLoad', 'ViralLoadIndication', 'DateofCurrent_TBStatus'
 ]
 
 b_columns_to_read = [
     'uuid', 'CurrentARTStatus'
-]
-
-r_columns_to_read = [
-    'State', 'LGA', 'Facility', 'Hospital Number', 'Unique ID', 'Patient ID', 'Date of TPT Start (yyyy-mm-dd)', 'TPT Type', 'TPT Completion date (yyyy-mm-dd)'
 ]
 
 # Columns
@@ -49,8 +44,6 @@ DATE_COLUMNS = [
 NUMERIC_COLUMNS = [
     'DaysOfARVRefill', 'CurrentViralLoad'
 ]
-
-EMRfilename = "LAMISNMRS.xlsx"
 
 # Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -139,16 +132,12 @@ def fetch_data():
     
     file1 = request.files.get("file1")
     file2 = request.files.get("file2")
-    file3 = request.files.get("file3")
 
     if not file1 or not is_allowed_file(file1.filename):
         return jsonify({"message": "Current ART Line List must be a CSV or Excel file."}), 400
 
     if file2 and not is_allowed_file(file2.filename):
         return jsonify({"message": "Baseline ART Line List must be a CSV or Excel file."}), 400
-    
-    if file3 and not is_allowed_file(file3.filename):
-        return jsonify({"message": "Baseline Lamis Radet must be a CSV or Excel file."}), 400
 
     try:
         try:
@@ -165,11 +154,6 @@ def fetch_data():
                         on='uuid', how='left', suffixes=('', '_baseline')
                     )
                     df['ARTStatus_PreviousQuarter'] = df['CurrentARTStatus_baseline']
-                    
-            if file3:
-                emr_df = pd.read_excel(EMRfilename, sheet_name=0)
-                dfbaselineRadet = pd.read_excel(file3, sheet_name=0, usecols=r_columns_to_read)
-                df = process_emr_data(df, dfbaselineRadet, emr_df)
                     
             #df.to_excel('df.xlsx')
             for col in DATE_COLUMNS:
@@ -729,146 +713,6 @@ def fetch_data():
             logging.exception("Error Processing ART 10 Summary")
             return jsonify({'error': str(e)}), 500
         
-        try:
-            #ART15aSUMMARY
-            # Ensure dates are datetime
-            df['ARTStartDate'] = pd.to_datetime(df['ARTStartDate'])
-            df['First_TPT_Pickupdate'] = pd.to_datetime(df['First_TPT_Pickupdate'])
-
-            # Filter only active clients
-            df_everTPT = df[df['CurrentARTStatus'] == "Active"].copy()
-
-            # Mark as everTPT if started TPT and ARTStartDate is more than 12 months ago
-            df_everTPT['everTPT'] = df_everTPT.apply(
-                lambda row: 1 if pd.notna(row['First_TPT_Pickupdate']) and row['ARTStartDate'].to_period('M') > last_year else 0,
-                axis=1
-            )
-
-            # Create pivot table
-            ART15aSummary = df_everTPT.pivot_table(
-                index='Sex',
-                columns='Age Band',
-                values='everTPT',
-                aggfunc='sum',
-                fill_value=0,
-                observed=False
-            )
-
-            # Standardize index and add totals
-            ART15aSummary = ART15aSummary.reindex(['M', 'F'])
-            ART15aSummary.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
-            ART15aSummary['Total'] = ART15aSummary.sum(axis=1)
-
-            # Display summary
-            #ART15aSummary
-            
-        except Exception as e:
-            logging.exception("Error Processing ART 15a Summary")
-            return jsonify({'error': str(e)}), 500
-        
-        
-        try:
-            #ART15bSUMMARY
-            # Filter only active clients
-            df_everTPT = df[df['CurrentARTStatus'] == "Active"].copy()
-
-            # Mark as everTPT if started TPT and ARTStartDate is more than 12 months ago
-            df_everTPT['everTPT'] = df_everTPT.apply(
-                lambda row: 1 if pd.notna(row['First_TPT_Pickupdate']) and row['ARTStartDate'].to_period('M') <= last_year else 0,
-                axis=1
-            )
-
-            # Create pivot table
-            ART15bSummary = df_everTPT.pivot_table(
-                index='Sex',
-                columns='Age Band',
-                values='everTPT',
-                aggfunc='sum',
-                fill_value=0,
-                observed=False
-            )
-
-            # Standardize index and add totals
-            ART15bSummary = ART15bSummary.reindex(['M', 'F'])
-            ART15bSummary.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
-            ART15bSummary['Total'] = ART15bSummary.sum(axis=1)
-
-            # Display summary
-            #ART15bSummary
-            
-        except Exception as e:
-            logging.exception("Error Processing ART 10 Summary")
-            return jsonify({'error': str(e)}), 500
-        
-        try:
-            #ART 16a Summary
-            # Filter only active clients
-            df_compTPT = df[df['CurrentARTStatus'] == "Active"].copy()
-
-            # Mark clients who have completed at least 6 months on TPT
-            df_compTPT['compTPT'] = df_compTPT.apply(
-                lambda row: 1 if pd.notna(row['First_TPT_Pickupdate']) and row['First_TPT_Pickupdate'].to_period('M') <= last_6mths and row['ARTStartDate'].to_period('M') > last_year else 0,
-                axis=1
-            )
-
-            # Create pivot table: ART16a (Active + completed 6 months on TPT)
-            ART16aSummary = df_compTPT.pivot_table(
-                index='Sex',
-                columns='Age Band',
-                values='compTPT',
-                aggfunc='sum',
-                fill_value=0,
-                observed=False
-            )
-
-            # Standardize index and add row totals
-            ART16aSummary = ART16aSummary.reindex(['M', 'F'])
-            ART16aSummary.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
-            ART16aSummary['Total'] = ART16aSummary.sum(axis=1)
-
-            # Optional: Add a total row
-            #ART16aSummary.loc['Total'] = ART16aSummary.sum(numeric_only=True)
-
-            #ART16aSummary
-            
-        except Exception as e:
-            logging.exception("Error Processing ART 10 Summary")
-            return jsonify({'error': str(e)}), 500
-        
-        try:            
-            #ART 16b Summary
-            # Filter only active clients
-            df_compTPT = df[df['CurrentARTStatus'] == "Active"].copy()
-
-            # Mark clients who have completed at least 6 months on TPT
-            df_compTPT['compTPT'] = df_compTPT.apply(
-                lambda row: 1 if pd.notna(row['First_TPT_Pickupdate']) and row['First_TPT_Pickupdate'].to_period('M') <= last_6mths and row['ARTStartDate'].to_period('M') <= last_year else 0,
-                axis=1
-            )
-
-            # Create pivot table: ART16a (Active + completed 6 months on TPT)
-            ART16bSummary = df_compTPT.pivot_table(
-                index='Sex',
-                columns='Age Band',
-                values='compTPT',
-                aggfunc='sum',
-                fill_value=0,
-                observed=False
-            )
-
-            # Standardize index and add row totals
-            ART16bSummary = ART16bSummary.reindex(['M', 'F'])
-            ART16bSummary.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
-            ART16bSummary['Total'] = ART16bSummary.sum(axis=1)
-
-            # Optional: Add a total row
-            #ART16aSummary.loc['Total'] = ART16aSummary.sum(numeric_only=True)
-            #ART16bSummary
-            
-        except Exception as e:
-            logging.exception("Error Processing ART 10 Summary")
-            return jsonify({'error': str(e)}), 500
-        
         
         try:
             # Define the dataframes
@@ -886,11 +730,7 @@ def fetch_data():
                 "ART8Summary": ART8Summary,
                 "ART9Summary": ART9Summary,
                 "ART10aSummary": ART10aSummary,
-                "ART10bSummary": ART10bSummary,
-                "ART15aSummary": ART15aSummary,
-                "ART15bSummary": ART15bSummary,
-                "ART16aSummary": ART16aSummary,
-                "ART16bSummary": ART16bSummary
+                "ART10bSummary": ART10bSummary
             }
 
             # Define a title mapping for each sheet
@@ -908,11 +748,7 @@ def fetch_data():
                 "ART8Summary": "ART 8: Number of PLHIV who RESTARTED ART during the month",
                 "ART9Summary": "ART 9: Number of PLHIV who were TRANSFERRED IN during the month ",
                 "ART10aSummary": "ART 10: Number of PLHIV on ART (Including PMTCT) who were Clinically Screened for TB in HIV Treatment Settings - Newly initiated on ART",
-                "ART10bSummary": "ART 10: Number of PLHIV on ART (Including PMTCT) who were Clinically Screened for TB in HIV Treatment Settings - Previously on ART",
-                "ART15aSummary": "ART15: Number of PLHIV on ART who initiated TB preventive treatment (TPT) - Initiated ART in the last 12 months",
-                "ART15bSummary": "ART15: Number of PLHIV on ART who initiated TB preventive treatment (TPT) - On ART greater than 12 months",
-                "ART16aSummary": "ART16: Number of PLHIV on ART who completed a course of TB preventive treatment among those who initiated TPT - Initiated ART in the last 12 months (TPT > 6 months assumed)",
-                "ART16bSummary": "ART16: Number of PLHIV on ART who completed a course of TB preventive treatment among those who initiated TPT - On ART greater than 12 months (TPT > 6 months assumed)"
+                "ART10bSummary": "ART 10: Number of PLHIV on ART (Including PMTCT) who were Clinically Screened for TB in HIV Treatment Settings - Previously on ART"
             }
 
             # Create a new workbook and add a worksheet
