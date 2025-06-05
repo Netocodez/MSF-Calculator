@@ -772,7 +772,7 @@ def fetch_data():
 
             # Mark as everTPT if started TPT and ARTStartDate is more than 12 months ago
             df_everTPT['everTPT'] = df_everTPT.apply(
-                lambda row: 1 if pd.notna(row['First_TPT_Pickupdate']) and row['ARTStartDate'].to_period('M') > last_year else 0,
+                lambda row: 1 if (pd.notna(row['First_TPT_Pickupdate']) or pd.notna(row['Current_TPT_Received'])) and (row['ARTStartDate'].to_period('M') > last_year) else 0,
                 axis=1
             )
 
@@ -806,7 +806,7 @@ def fetch_data():
 
             # Mark as everTPT if started TPT and ARTStartDate is more than 12 months ago
             df_everTPT['everTPT'] = df_everTPT.apply(
-                lambda row: 1 if pd.notna(row['First_TPT_Pickupdate']) and row['ARTStartDate'].to_period('M') <= last_year else 0,
+                lambda row: 1 if (pd.notna(row['First_TPT_Pickupdate']) or pd.notna(row['Current_TPT_Received'])) and (row['ARTStartDate'].to_period('M') <= last_year) else 0,
                 axis=1
             )
 
@@ -839,7 +839,11 @@ def fetch_data():
 
             # Mark clients who have completed at least 6 months on TPT
             df_compTPT['compTPT'] = df_compTPT.apply(
-                lambda row: 1 if pd.notna(row['First_TPT_Pickupdate']) and row['First_TPT_Pickupdate'].to_period('M') <= last_6mths and row['ARTStartDate'].to_period('M') > last_year else 0,
+                lambda row: 1 if (
+                    (pd.notna(row['First_TPT_Pickupdate']) or pd.notna(row['Current_TPT_Received'])) and
+                    (pd.notna(row['First_TPT_Pickupdate']) and row['First_TPT_Pickupdate'].to_period('M') <= last_6mths) and
+                    (pd.notna(row['ARTStartDate']) and row['ARTStartDate'].to_period('M') > last_year)
+                ) else 0,
                 axis=1
             )
 
@@ -874,7 +878,11 @@ def fetch_data():
 
             # Mark clients who have completed at least 6 months on TPT
             df_compTPT['compTPT'] = df_compTPT.apply(
-                lambda row: 1 if pd.notna(row['First_TPT_Pickupdate']) and row['First_TPT_Pickupdate'].to_period('M') <= last_6mths and row['ARTStartDate'].to_period('M') <= last_year else 0,
+                lambda row: 1 if (
+                    (pd.notna(row['First_TPT_Pickupdate']) or pd.notna(row['Current_TPT_Received'])) and
+                    (pd.notna(row['First_TPT_Pickupdate']) and row['First_TPT_Pickupdate'].to_period('M') <= last_6mths) and
+                    (pd.notna(row['ARTStartDate']) and row['ARTStartDate'].to_period('M') <= last_year)
+                ) else 0,
                 axis=1
             )
 
