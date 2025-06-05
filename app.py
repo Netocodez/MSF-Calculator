@@ -77,7 +77,7 @@ def load_file(file, columns_to_read=None):
             skip_blank_lines=True
         )
     elif file_ext in ['.xls', '.xlsx']:
-        return pd.read_excel(file, sheet_name=0, dtype=object, usecols=columns_to_read)
+        return pd.read_excel(file, sheet_name=0, dtype=object, usecols=columns_to_read, engine='openpyxl')
     else:
         raise ValueError("Unsupported file type")
 
