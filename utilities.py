@@ -49,20 +49,28 @@ def process_emr_data(df, dfbaseline, emr_df):
     dfbaseline = dfbaseline.drop_duplicates(subset=['unique identifiers'], keep=False)
 
     # Handle duplicate IDs in current df by appending _A, _B, etc.
-    dup_mask = df.duplicated(['unique identifiers'], keep=False)
-    alphabet = dict(enumerate(string.ascii_uppercase))
-    df.loc[dup_mask, 'unique identifiers'] += '_' + df[dup_mask].groupby(['unique identifiers']).cumcount().map(alphabet)
+    #dup_mask = df.duplicated(['unique identifiers'], keep=False)
+    #alphabet = dict(enumerate(string.ascii_uppercase))
+    #df.loc[dup_mask, 'unique identifiers'] += '_' + df[dup_mask].groupby(['unique identifiers']).cumcount().map(alphabet)
 
     # Map TPT values from baseline to current df
-    df['Radet_Date of TPT Start (yyyy-mm-dd)'] = df['unique identifiers'].map(
-        dfbaseline.set_index('unique identifiers')['Date of TPT Start (yyyy-mm-dd)']
-    )
-    df['Radet_TPT Type'] = df['unique identifiers'].map(
-        dfbaseline.set_index('unique identifiers')['TPT Type']
-    )
+    #df['Radet_Date of TPT Start (yyyy-mm-dd)'] = df['unique identifiers'].map(dfbaseline.set_index('unique identifiers')['Date of TPT Start (yyyy-mm-dd)'])
+    #df['Radet_TPT Type'] = df['unique identifiers'].map(dfbaseline.set_index('unique identifiers')['TPT Type'])
 
-    # Fill missing TPT fields in current dataset
-    df.loc[df['First_TPT_Pickupdate'].isna(), 'First_TPT_Pickupdate'] = df['Radet_Date of TPT Start (yyyy-mm-dd)']
-    df.loc[df['Current_TPT_Received'].isna(), 'Current_TPT_Received'] = df['Radet_TPT Type']
+    # Merge only necessary columns from baseline
+    #tpt_info = dfbaseline[['unique identifiers', 'Date of TPT Start (yyyy-mm-dd)', 'TPT Type']]
+
+    # Merge into df
+    df = df.merge(
+        dfbaseline[['unique identifiers', 'Date of TPT Start (yyyy-mm-dd)', 'TPT Type']],
+        on='unique identifiers',
+        how='left',
+        suffixes=('', '_baseline')
+    )
+    #df.to_excel('df.xlsx')
+
+    # Fill missing TPT values
+    df['First_TPT_Pickupdate'] = df['First_TPT_Pickupdate'].fillna(df['Date of TPT Start (yyyy-mm-dd)'])
+    df['Current_TPT_Received'] = df['Current_TPT_Received'].fillna(df['TPT Type'])
 
     return df

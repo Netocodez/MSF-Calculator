@@ -168,7 +168,7 @@ def fetch_data():
                     
             if file3:
                 emr_df = pd.read_excel(EMRfilename, sheet_name=0)
-                dfbaselineRadet = pd.read_excel(file3, sheet_name=0, usecols=r_columns_to_read)
+                dfbaselineRadet = load_file(file3, columns_to_read=r_columns_to_read)
                 df = process_emr_data(df, dfbaselineRadet, emr_df)
                     
             #df.to_excel('df.xlsx')
