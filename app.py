@@ -114,7 +114,6 @@ def process_emr_data(df, dfbaseline, emr_df):
     # Drop extra columns
     df.drop(['Name on NMRS', 'LGA_emr', 'STATE', 'Name on Lamis'], axis=1, inplace=True)
 
-
     # Normalize hospital numbers and unique IDs
     df['PatientHospitalNo1'] = df['PatientHospitalNo'].apply(clean_id)
     df['PatientUniqueID1'] = df['PEPID'].apply(clean_id)
@@ -139,10 +138,17 @@ def process_emr_data(df, dfbaseline, emr_df):
     # Drop duplicates from baseline data
     dfbaseline = dfbaseline.drop_duplicates(subset=['unique identifiers'], keep=False)
 
-    # Handle duplicate IDs in current df by appending _A, _B, etc.
-    #dup_mask = df.duplicated(['unique identifiers'], keep=False)
-    #alphabet = dict(enumerate(string.ascii_uppercase))
-    #df.loc[dup_mask, 'unique identifiers'] += '_' + df[dup_mask].groupby(['unique identifiers']).cumcount().map(alphabet)
+    # Identify duplicates in 'unique identifiers'
+    dup_mask = df.duplicated('unique identifiers', keep=False)
+
+    # Only modify duplicates
+    df.loc[dup_mask, 'unique identifiers'] = (
+        df.loc[dup_mask]
+        .groupby('unique identifiers')
+        .cumcount()
+        .astype(str)
+        .radd(df.loc[dup_mask, 'unique identifiers'] + '_')
+    )
 
     # Merge into df
     df = df.merge(
@@ -151,7 +157,7 @@ def process_emr_data(df, dfbaseline, emr_df):
         how='left',
         suffixes=('', '_baseline')
     )
-    df.to_excel('df.xlsx')
+    #df.to_excel('df.xlsx')
 
     # Fill missing TPT values
     df['Date of TPT Start (yyyy-mm-dd)'] = pd.to_datetime(df['Date of TPT Start (yyyy-mm-dd)'], errors='coerce', dayfirst=True)
@@ -310,7 +316,7 @@ def fetch_data():
             ART2Summary.loc['TB Patients', 'Total'] = sum_on_tb
 
             # Display the modified summary
-            ART2Summary
+            #ART2Summary
             
         except Exception as e:
             logging.exception("Error Processing ART 2 Summary")
@@ -350,7 +356,7 @@ def fetch_data():
             ART3Summary.loc['Breastfeeding (subset of ART 3)', 'Total'] = sum_breastfeeding
 
             # Display the modified ART3Summary
-            ART3Summary
+            #ART3Summary
             
             #ART3 CONTD Regimen Lines
             def get_group_summary(df_sub, label):
@@ -382,7 +388,7 @@ def fetch_data():
             total_row = ART3aSummary.sum(numeric_only=True).to_frame().T
             total_row.index = ['Total']
             ART3aSummary = pd.concat([ART3aSummary, total_row])
-            ART3aSummary
+            #ART3aSummary
             
             
             #ART 3 CONTD MMDs
@@ -396,7 +402,7 @@ def fetch_data():
             total_row = ART3bSummary.sum(numeric_only=True).to_frame().T
             total_row.index = ['Total']
             ART3bSummary = pd.concat([ART3bSummary, total_row])
-            ART3bSummary
+            #ART3bSummary
             
             
             #ART3 CONTD MODELS
@@ -412,7 +418,7 @@ def fetch_data():
             ART3cSummary.rename(index={'Facility Dispensing': 'Facility-based models', 'Decentralized Drug Delivery (DDD)': 'Community-based models'}, inplace=True)
             ART3cSummary = ART3cSummary.reindex(['Facility-based models', 'Community-based models'])
 
-            ART3cSummary
+            #ART3cSummary
         except Exception as e:
             logging.exception("Error Processing ART 3 Summary")
             return jsonify({'error': str(e)}), 500
@@ -484,7 +490,7 @@ def fetch_data():
             ART5summary.loc['Dead (subset of ART 5)', 'Total'] = sum_Dead
 
             # Display the modified summary
-            ART5summary
+            #ART5summary
             
         except Exception as e:
             logging.exception("Error Processing ART 5 Summary")
@@ -536,7 +542,7 @@ def fetch_data():
             VLRoutine.loc['Breastfeeding (subset of ART 6)', 'Total'] = sum_breastfeeding
 
             # Display the modified summary
-            VLRoutine
+            #VLRoutine
             
             
             #ART 6 VL Targeted
@@ -567,7 +573,7 @@ def fetch_data():
             VLTargeted.loc['Community-based DSD models (subset of ART 6)', 'Total'] = sum_breastfeeding
 
             # Display the modified summary
-            VLTargeted
+            #VLTargeted
             
             
             #ART 7 (VL Routine Suppressed)
@@ -613,7 +619,7 @@ def fetch_data():
             VLRoutine_Sup.loc['Breastfeeding (subset of ART 6)', 'Total'] = sum_breastfeeding
 
             # Display the modified summary
-            VLRoutine_Sup
+            #VLRoutine_Sup
             
             
             #ART 7 VL Targeted Suppressed
@@ -644,7 +650,7 @@ def fetch_data():
             VLTargeted_Sup.loc['Community-based DSD models (subset of ART 6)', 'Total'] = sum_breastfeeding
 
             # Display the modified summary
-            VLTargeted_Sup
+            #VLTargeted_Sup
             
             
             #ART 8 (Restart)
@@ -671,7 +677,7 @@ def fetch_data():
             ART8Summary['Total'] = ART8Summary.sum(axis=1)
 
             # Display the modified ART8Summary
-            ART8Summary
+            #ART8Summary
         
         except Exception as e:
             logging.exception("Error Processing ART 6 and 7 Summary")
@@ -701,7 +707,7 @@ def fetch_data():
             ART9Summary['Total'] = ART9Summary.sum(axis=1)
 
             # Display the modified ART8Summary
-            ART9Summary
+            #ART9Summary
         
         except Exception as e:
             logging.exception("Error Processing ART 9 Summary")
@@ -730,7 +736,7 @@ def fetch_data():
             ART10aSummary['Total'] = ART10aSummary.sum(axis=1)
 
             # Display the modified ART8Summary
-            ART10aSummary
+            #ART10aSummary
             
             
             #ART 10b (TB Screening Previously on ART)
@@ -755,7 +761,7 @@ def fetch_data():
             ART10bSummary['Total'] = ART10bSummary.sum(axis=1)
 
             # Display the modified ART8Summary
-            ART10bSummary
+            #ART10bSummary
             
         except Exception as e:
             logging.exception("Error Processing ART 10 Summary")
