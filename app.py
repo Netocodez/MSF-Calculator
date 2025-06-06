@@ -69,6 +69,7 @@ def load_file(file, columns_to_read=None):
     if file_ext == '.csv':
         return pd.read_csv(
             file,
+            dtype=str,
             encoding='utf-8',
             lineterminator='\n',
             quotechar='"',
@@ -781,6 +782,7 @@ def fetch_data():
                 lambda row: 1 if (pd.notna(row['First_TPT_Pickupdate']) or pd.notna(row['Current_TPT_Received'])) and (row['ARTStartDate'].to_period('M') > last_year) else 0,
                 axis=1
             )
+            #df_everTPT.to_excel('df_everTPT.xlsx')
 
             # Create pivot table
             ART15aSummary = df_everTPT.pivot_table(
@@ -852,6 +854,7 @@ def fetch_data():
                 ) else 0,
                 axis=1
             )
+            #df_compTPT.to_excel('df_compTPT.xlsx')
 
             # Create pivot table: ART16a (Active + completed 6 months on TPT)
             ART16aSummary = df_compTPT.pivot_table(
