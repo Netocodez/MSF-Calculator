@@ -779,7 +779,7 @@ def fetch_data():
 
             # Mark as everTPT if started TPT and ARTStartDate is more than 12 months ago
             df_everTPT['everTPT'] = df_everTPT.apply(
-                lambda row: 1 if (pd.notna(row['First_TPT_Pickupdate']) or pd.notna(row['Current_TPT_Received'])) and (row['ARTStartDate'].to_period('M') > last_year) else 0,
+                lambda row: 1 if (pd.notna(row['First_TPT_Pickupdate']) or pd.notna(row['Current_TPT_Received'])) and (pd.notna(row['ARTStartDate']) and row['ARTStartDate'].to_period('M') > last_year) else 0,
                 axis=1
             )
             #df_everTPT.to_excel('df_everTPT.xlsx')
@@ -814,7 +814,7 @@ def fetch_data():
 
             # Mark as everTPT if started TPT and ARTStartDate is more than 12 months ago
             df_everTPT['everTPT'] = df_everTPT.apply(
-                lambda row: 1 if (pd.notna(row['First_TPT_Pickupdate']) or pd.notna(row['Current_TPT_Received'])) and (row['ARTStartDate'].to_period('M') <= last_year) else 0,
+                lambda row: 1 if (pd.notna(row['First_TPT_Pickupdate']) or pd.notna(row['Current_TPT_Received'])) and (pd.notna(row['ARTStartDate']) and row['ARTStartDate'].to_period('M') <= last_year) else 0,
                 axis=1
             )
 
