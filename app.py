@@ -743,7 +743,7 @@ def fetch_data():
             #ART 10b (TB Screening Previously on ART)
             # Filter only active clients
             df_TBScrnPrev = df[(df['CurrentARTStatus'] == "Active") & 
-                        (df['DateofCurrent_TBStatus'].notna()) &
+                        #(df['DateofCurrent_TBStatus'].notna()) &
                         (df['Pharmacy_LastPickupdate'].dt.to_period('M') == Period)].copy()
             df_TBScrnPrev.loc[:, 'TBScrnPrev'] = df_TBScrnPrev['ARTStartDate'].dt.to_period('M').apply(lambda x: 1 if x != Period else 0)
 
