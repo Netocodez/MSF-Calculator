@@ -658,10 +658,26 @@ def fetch_data():
             df['ARTStartDate'] = pd.to_datetime(df['ARTStartDate'])
 
             # Filter only active clients
-            df_Restart = df[(df['CurrentARTStatus'] == "Active") & 
-                        ((df['ARTStatus_PreviousQuarter'] != "Active") & (df['ARTStatus_PreviousQuarter'].notna())) &
-                        (df['ARTStartDate'].dt.to_period('M') != Period)].copy()
-            df_Restart.loc[:, 'Restart'] = df_Restart['Date_Transfered_In'].dt.to_period('M').apply(lambda x: 1 if x != Period else 0)
+            #df_Restart = df[(df['CurrentARTStatus'] == "Active") & 
+                        #((df['ARTStatus_PreviousQuarter'] != "Active") & (df['ARTStatus_PreviousQuarter'].notna())) &
+                        #(df['ARTStartDate'].dt.to_period('M') != Period)].copy()
+            #df_Restart.loc[:, 'Restart'] = df_Restart['Date_Transfered_In'].dt.to_period('M').apply(lambda x: 1 if x != Period else 0)
+            
+            # Step 1: Filter only active clients (and valid ARTStartDate)
+            df_Restart = df[
+                (df['CurrentARTStatus'] == "Active") &
+                (df['ARTStartDate'].dt.to_period('M') != Period)
+            ].copy()
+
+            # Step 2: Define Restart condition based on transfer date and ART status in previous quarter
+            df_Restart['Restart'] = np.where(
+                (df_Restart['ARTStatus_PreviousQuarter'].notna()) &
+                (df_Restart['ARTStatus_PreviousQuarter'] != "Active") &
+                (df_Restart['Date_Transfered_In'].dt.to_period('M') != Period),
+                1,
+                0
+            )         
+            
 
             # Creating the original ART3Summary pivot table
             ART8Summary = df_Restart.pivot_table(
