@@ -230,7 +230,7 @@ def fetch_data():
 
             # your code
             #data processing logic here...
-            bins = [0, 0.99, 4, 9, 14, 19, 24, 29, 34, 39, 44, 49, 54, 59, 64, float('inf')]
+            bins = [-np.inf, 1, 4, 9, 14, 19, 24, 29, 34, 39, 44, 49, 54, 59, 64, np.inf]
             labels = ['<1', '1-4', '5-9', '10-14', '15-19', '20-24', '25-29', '30-34', 
                     '35-39', '40-44', '45-49', '50-54', '55-59', '60-64', '65+']
 
@@ -241,15 +241,30 @@ def fetch_data():
             unique_facilities = df['FacilityName'].unique()
             facilities_text = ', '.join(unique_facilities)
             print(facilities_text)
+            
+            #function to calculate current age and mirror excel datedif function
+            def calculate_age_vectorized(df, dob_col='DOB', ref_date=None):
+                # ✅ pick the reference date
+                if ref_date is None:
+                    today = pd.Timestamp.today().normalize()  # current day
+                else:
+                    today = pd.to_datetime(ref_date) + pd.offsets.MonthEnd(0)  # last day of month for given date
 
-            # Calculate age by subtracting DOB from today's date and dividing by 365.25 for leap years
-            today = pd.to_datetime(end_date)  # Get the current date
-            df['Age'] = (today - df['DOB']).dt.days / 365.25  # Convert the difference to years
+                # ✅ fully vectorized age calculation
+                dob = df[dob_col]
+                age = (today.year - dob.dt.year 
+                    - ((dob.dt.month > today.month) | 
+                        ((dob.dt.month == today.month) & (dob.dt.day > today.day))).astype(int))
 
-            df['Age Band'] = pd.cut(df['Age'], bins=bins, labels=labels)
+                return age
+            
+            df['Age'] = calculate_age_vectorized(df, 'DOB', ref_date=end_date)
+
+            df['Age Band'] = pd.cut(df['Age'], bins=bins, labels=labels, right=True)
             df['Age Band2'] = pd.cut(df['Age'], bins=bins2, labels=labels2)
             last_year = (Period.to_timestamp() - pd.DateOffset(months=12)).to_period('M')
             last_6mths = (Period.to_timestamp() - pd.DateOffset(months=6)).to_period('M')
+            #df.to_excel('df.xlsx')
 
             # Creating additional columns for pregnant, breastfeeding, and TB clients
             df['IsPregnant'] = df['CurrentPregnancyStatus'].apply(lambda x: 1 if x == "Pregnant" else 0)
