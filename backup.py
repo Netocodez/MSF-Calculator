@@ -806,20 +806,13 @@ def fetch_data():
             df['First_TPT_Pickupdate'] = pd.to_datetime(df['First_TPT_Pickupdate'])
 
             # Filter only active clients
-            df_everTPT = df#[df['CurrentARTStatus'] == "Active"].copy()
+            df_everTPT = df[df['CurrentARTStatus'] == "Active"].copy()
 
             # Mark as everTPT if started TPT and ARTStartDate is more than 12 months ago
-            #df_everTPT['everTPT'] = df_everTPT.apply(
-                #lambda row: 1 if (pd.notna(row['First_TPT_Pickupdate']) or pd.notna(row['Current_TPT_Received'])) and (pd.notna(row['ARTStartDate']) and row['ARTStartDate'].to_period('M') > last_year) else 0,
-                #axis=1
-            #)
-            
-            # Mark as everTPT if TPT started in month in review and ART was initiated in the last 12 months
             df_everTPT['everTPT'] = df_everTPT.apply(
-                lambda row: 1 if ((pd.notna(row['First_TPT_Pickupdate']) and row['First_TPT_Pickupdate'].to_period('M') == Period)) and (pd.notna(row['ARTStartDate']) and row['ARTStartDate'].to_period('M') > last_year) else 0,
+                lambda row: 1 if (pd.notna(row['First_TPT_Pickupdate']) or pd.notna(row['Current_TPT_Received'])) and (pd.notna(row['ARTStartDate']) and row['ARTStartDate'].to_period('M') > last_year) else 0,
                 axis=1
             )
-            
             #df_everTPT.to_excel('df_everTPT.xlsx')
 
             # Create pivot table
@@ -848,20 +841,13 @@ def fetch_data():
         try:
             #ART15bSUMMARY
             # Filter only active clients
-            df_everTPT = df#[df['CurrentARTStatus'] == "Active"].copy()
+            df_everTPT = df[df['CurrentARTStatus'] == "Active"].copy()
 
             # Mark as everTPT if started TPT and ARTStartDate is more than 12 months ago
-            #df_everTPT['everTPT'] = df_everTPT.apply(
-                #lambda row: 1 if (pd.notna(row['First_TPT_Pickupdate']) or pd.notna(row['Current_TPT_Received'])) and (pd.notna(row['ARTStartDate']) and row['ARTStartDate'].to_period('M') <= last_year) else 0,
-                #axis=1
-            #)
-            
-            # Mark as everTPT if started TPT and ARTStartDate is more than 12 months ago
             df_everTPT['everTPT'] = df_everTPT.apply(
-                lambda row: 1 if ((pd.notna(row['First_TPT_Pickupdate'])) and row['First_TPT_Pickupdate'].to_period('M') == Period) and (pd.notna(row['ARTStartDate']) and row['ARTStartDate'].to_period('M') <= last_year) else 0,
+                lambda row: 1 if (pd.notna(row['First_TPT_Pickupdate']) or pd.notna(row['Current_TPT_Received'])) and (pd.notna(row['ARTStartDate']) and row['ARTStartDate'].to_period('M') <= last_year) else 0,
                 axis=1
             )
-            #df_everTPT.to_excel('df_everTPT.xlsx')
 
             # Create pivot table
             ART15bSummary = df_everTPT.pivot_table(
@@ -893,8 +879,8 @@ def fetch_data():
             # Mark clients who have completed at least 6 months on TPT
             df_compTPT['compTPT'] = df_compTPT.apply(
                 lambda row: 1 if (
-                    (pd.notna(row['First_TPT_Pickupdate'])) and
-                    (pd.notna(row['First_TPT_Pickupdate']) and row['First_TPT_Pickupdate'].to_period('M') == last_6mths) and
+                    (pd.notna(row['First_TPT_Pickupdate']) or pd.notna(row['Current_TPT_Received'])) and
+                    (pd.notna(row['First_TPT_Pickupdate']) and row['First_TPT_Pickupdate'].to_period('M') <= last_6mths) and
                     (pd.notna(row['ARTStartDate']) and row['ARTStartDate'].to_period('M') > last_year)
                 ) else 0,
                 axis=1
@@ -933,8 +919,8 @@ def fetch_data():
             # Mark clients who have completed at least 6 months on TPT
             df_compTPT['compTPT'] = df_compTPT.apply(
                 lambda row: 1 if (
-                    (pd.notna(row['First_TPT_Pickupdate'])) and
-                    (pd.notna(row['First_TPT_Pickupdate']) and row['First_TPT_Pickupdate'].to_period('M') == last_6mths) and
+                    (pd.notna(row['First_TPT_Pickupdate']) or pd.notna(row['Current_TPT_Received'])) and
+                    (pd.notna(row['First_TPT_Pickupdate']) and row['First_TPT_Pickupdate'].to_period('M') <= last_6mths) and
                     (pd.notna(row['ARTStartDate']) and row['ARTStartDate'].to_period('M') <= last_year)
                 ) else 0,
                 axis=1
