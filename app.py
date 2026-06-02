@@ -236,6 +236,20 @@ def fetch_data():
 
             bins2 = [0, 14, float('inf')]
             labels2 = ['<15', '>=15']
+            
+            AGE_BANDS = [
+                '<1', '1-4', '5-9', '10-14',
+                '15-19', '20-24', '25-29',
+                '30-34', '35-39', '40-44',
+                '45-49', '50-54', '55-59',
+                '60-64', '65+'
+            ]
+
+            def standardize_ageband_pivot(pt):
+                pt = pt.reindex(columns=AGE_BANDS, fill_value=0)
+                pt = pt.reindex(['M', 'F'], fill_value=0)
+                pt.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
+                return pt
 
             # Extract unique facility names as a list
             unique_facilities = df['FacilityName'].unique()
@@ -310,8 +324,10 @@ def fetch_data():
             )
 
             # Reindexing and renaming Sex categories
-            ART2Summary = ART2Summary.reindex(['M', 'F'])
-            ART2Summary.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
+            #ART2Summary = ART2Summary.reindex(['M', 'F'])
+            #ART2Summary.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
+            
+            ART2Summary = standardize_ageband_pivot(ART2Summary)
 
             # Adding 'Total' column
             ART2Summary['Total'] = ART2Summary.sum(axis=1)
@@ -355,8 +371,9 @@ def fetch_data():
                 observed=False
             )
 
-            ART3Summary = ART3Summary.reindex(['M', 'F'])
-            ART3Summary.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
+            #ART3Summary = ART3Summary.reindex(['M', 'F'])
+            #ART3Summary.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
+            ART3Summary = standardize_ageband_pivot(ART3Summary)
             ART3Summary['Total'] = ART3Summary.sum(axis=1)
 
             # Summing TCS1 for only active clients and the new categories
@@ -482,10 +499,13 @@ def fetch_data():
                 fill_value=0,
                 observed=False
             )
-
-            ART5summary = ART5summary.reindex(['M', 'F'])
-            ART5summary.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
+            
+            ART5summary = standardize_ageband_pivot(ART5summary)
             ART5summary['Total'] = ART5summary.sum(axis=1)
+
+            #ART5summary = ART5summary.reindex(['M', 'F'])
+            #ART5summary.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
+            #ART5summary['Total'] = ART5summary.sum(axis=1)
 
             # Summing TCS1 for only active clients and the new categories
             sum_TO = df_Losses[df_Losses['Transferred out'] == 1]['Losses'].sum()
@@ -541,8 +561,9 @@ def fetch_data():
                 observed=False
             )
 
-            VLRoutine = VLRoutine.reindex(['M', 'F'])
-            VLRoutine.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
+            #VLRoutine = VLRoutine.reindex(['M', 'F'])
+            #VLRoutine.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
+            VLRoutine = standardize_ageband_pivot(VLRoutine)
             VLRoutine['Total'] = VLRoutine.sum(axis=1)
 
             # Summing new categories
@@ -572,8 +593,9 @@ def fetch_data():
                 observed=False
             )
 
-            VLTargeted = VLTargeted.reindex(['M', 'F'])
-            VLTargeted.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
+            #VLTargeted = VLTargeted.reindex(['M', 'F'])
+            #VLTargeted.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
+            VLTargeted = standardize_ageband_pivot(VLTargeted)
             VLTargeted['Total'] = VLTargeted.sum(axis=1)
 
             # Summing new categories
@@ -649,8 +671,9 @@ def fetch_data():
                 observed=False
             )
 
-            VLTargeted_Sup = VLTargeted_Sup.reindex(['M', 'F'])
-            VLTargeted_Sup.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
+            #VLTargeted_Sup = VLTargeted_Sup.reindex(['M', 'F'])
+            #VLTargeted_Sup.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
+            VLTargeted_Sup = standardize_ageband_pivot(VLTargeted_Sup)
             VLTargeted_Sup['Total'] = VLTargeted_Sup.sum(axis=1)
 
             # Summing new categories
@@ -704,8 +727,9 @@ def fetch_data():
                 observed=False
             )
 
-            ART8Summary = ART8Summary.reindex(['M', 'F'])
-            ART8Summary.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
+            #ART8Summary = ART8Summary.reindex(['M', 'F'])
+            #ART8Summary.rename(index={'M': 'Male', 'F': 'Female'}, inplace=True)
+            ART8Summary = standardize_ageband_pivot(ART8Summary)
             ART8Summary['Total'] = ART8Summary.sum(axis=1)
 
             # Display the modified ART8Summary
