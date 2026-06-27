@@ -26,8 +26,8 @@ formatted_period = None
 
 #columns to process
 columns_to_read = [
-    'State', 'LGA', 'FacilityName', 'PatientHospitalNo', 'PEPID', 'uuid', 'ARTStatus_PreviousQuarter','CurrentARTStatus', 'DOB', 'ARTStartDate', 'Pharmacy_LastPickupdate',
-    'DateResultReceivedFacility', 'Date_Transfered_In',
+    'State', 'LGA', 'FacilityName', 'PatientHospitalNo', 'PEPID', 'uuid', 'ARTStatus_PreviousQuarter','CurrentARTStatus', 'DOB', 'ARTStartDate', 'DateConfirmedHIV+', 'Pharmacy_LastPickupdate',
+    'DateResultReceivedFacility', 'Date_Transfered_In','Whostage','CurrentCD4','Current_CD4_LFA_Result','Serology_for_CrAg_Result','CSF_for_CrAg_Result',
     'CurrentPregnancyStatus', 'First_TPT_Pickupdate', 'Current_TPT_Received', 'Current_TB_Status', 'CurrentRegimenLine',
     'DaysOfARVRefill', 'DSD_Model', 'Sex', 'Outcomes_Date', 'CurrentViralLoad', 'ViralLoadIndication', 'DateofCurrent_TBStatus'
 ]
@@ -42,12 +42,12 @@ r_columns_to_read = [
 
 # Columns
 DATE_COLUMNS = [
-    'DOB', 'ARTStartDate', 'Pharmacy_LastPickupdate',
+    'DOB', 'ARTStartDate','DateConfirmedHIV+', 'Pharmacy_LastPickupdate',
     'DateResultReceivedFacility', 'Date_Transfered_In', 'Outcomes_Date', 'DateofCurrent_TBStatus', 'First_TPT_Pickupdate'
 ]
 
 NUMERIC_COLUMNS = [
-    'DaysOfARVRefill', 'CurrentViralLoad'
+    'DaysOfARVRefill', 'CurrentViralLoad', 'CurrentCD4'
 ]
 
 EMRfilename = "LAMISNMRS.csv"
@@ -824,6 +824,101 @@ def fetch_data():
             return jsonify({'error': str(e)}), 500
         
         try:
+            df_ART19 = df[
+                df['DateConfirmedHIV+'].dt.to_period('M') == Period
+            ].copy()
+
+            df_ART19['CurrentCD4'] = pd.to_numeric(
+                df_ART19['CurrentCD4'], errors='coerce'
+            )
+
+            df_ART19['Whostage'] = (
+                df_ART19['Whostage']
+                .astype(str)
+                .str.strip()
+                .str.upper()
+            )
+
+            df_ART19['ART19'] = (
+                df_ART19['Whostage'].isin(
+                    ['3', '4', 'III', 'IV', 'STAGE III', 'STAGE IV']
+                ) |
+                (df_ART19['CurrentCD4'] < 200) |
+                (df_ART19['Current_CD4_LFA_Result'] == 'LessThan200')
+            ).astype(int)
+
+            ART19Summary = df_ART19.pivot_table(
+                index='Sex',
+                columns='Age Band',
+                values='ART19',
+                aggfunc='sum',
+                fill_value=0,
+                observed=False
+            )
+
+            ART19Summary = standardize_ageband_pivot(ART19Summary)
+            ART19Summary['Total'] = ART19Summary.sum(axis=1)
+
+        except Exception as e:
+            logging.exception("Error Processing ART 19 Summary")
+            return jsonify({'error': str(e)}), 500
+        
+        
+        try:
+            # ART20 population = ART19 clients
+            df_ART20 = df_ART19[df_ART19['ART19'] == 1].copy()
+
+            df_ART20['Serology_for_CrAg_Result'] = (
+                df_ART20['Serology_for_CrAg_Result']
+                .astype(str)
+                .str.strip()
+            )
+            
+            df_ART20['CSF_for_CrAg_Result'] = (
+                df_ART20['CSF_for_CrAg_Result']
+                .astype(str)
+                .str.strip()
+            )
+            
+            # Create a new column 'CrAgNegative' that is 1 if either CrAg result is 'Negative', otherwise 0
+            df_ART20['CrAgNegative'] = (
+                (df_ART20['Serology_for_CrAg_Result'] == 'Negative') | (df_ART20['CSF_for_CrAg_Result'] == 'Negative')
+            ).astype(int)
+
+            ART20aSummary = df_ART20.pivot_table(
+                index='Sex',
+                columns='Age Band',
+                values='CrAgNegative',
+                aggfunc='sum',
+                fill_value=0,
+                observed=False
+            )
+
+            ART20aSummary = standardize_ageband_pivot(ART20aSummary)
+            ART20aSummary['Total'] = ART20aSummary.sum(axis=1)
+            
+            
+            df_ART20['CrAgPositive'] = (
+                (df_ART20['Serology_for_CrAg_Result'] == 'Positive') | (df_ART20['CSF_for_CrAg_Result'] == 'Positive')  
+            ).astype(int)
+
+            ART20bSummary = df_ART20.pivot_table(
+                index='Sex',
+                columns='Age Band',
+                values='CrAgPositive',
+                aggfunc='sum',
+                fill_value=0,
+                observed=False
+            )
+
+            ART20bSummary = standardize_ageband_pivot(ART20bSummary)
+            ART20bSummary['Total'] = ART20bSummary.sum(axis=1)
+        
+        except Exception as e:
+            logging.exception("Error Processing ART 20 Summary")
+            return jsonify({'error': str(e)}), 500
+        
+        try:
             #ART15aSUMMARY
             # Ensure dates are datetime
             df['ARTStartDate'] = pd.to_datetime(df['ARTStartDate'])
@@ -1008,7 +1103,10 @@ def fetch_data():
                 "ART15aSummary": ART15aSummary,
                 "ART15bSummary": ART15bSummary,
                 "ART16aSummary": ART16aSummary,
-                "ART16bSummary": ART16bSummary
+                "ART16bSummary": ART16bSummary,
+                "ART19Summary": ART19Summary,
+                "ART20aSummary": ART20aSummary,
+                "ART20bSummary": ART20bSummary
             }
 
             # Define a title mapping for each sheet
@@ -1030,7 +1128,10 @@ def fetch_data():
                 "ART15aSummary": "ART15: Number of PLHIV on ART who initiated TB preventive treatment (TPT) - Initiated ART in the last 12 months",
                 "ART15bSummary": "ART15: Number of PLHIV on ART who initiated TB preventive treatment (TPT) - On ART greater than 12 months",
                 "ART16aSummary": "ART16: Number of PLHIV on ART who completed a course of TB preventive treatment among those who initiated TPT - Initiated ART in the last 12 months (TPT > 6 months assumed)",
-                "ART16bSummary": "ART16: Number of PLHIV on ART who completed a course of TB preventive treatment among those who initiated TPT - On ART greater than 12 months (TPT > 6 months assumed)"
+                "ART16bSummary": "ART16: Number of PLHIV on ART who completed a course of TB preventive treatment among those who initiated TPT - On ART greater than 12 months (TPT > 6 months assumed)",
+                "ART19Summary": "ART 19: Number of newly enrolled PLHIV with WHO clinical stages 3 and 4 and/or CD4 <200 cells/mm3 (Advanced HIV Disease)",
+                "ART20aSummary": "ART 20a: Number of newly enrolled PLHIV presenting with WHO clinical stages 3 and 4 and/or CD4<200c/mm3 screened for serum Cryptococcal Antigen (Serum CrAg) before ART initiation - CrAg Negative",
+                "ART20bSummary": "ART 20b: Number of newly enrolled PLHIV presenting with WHO clinical stages 3 and 4 and/or CD4<200c/mm3 screened for serum Cryptococcal Antigen (Serum CrAg) before ART initiation - CrAg Positive"
             }
 
             # Create a new workbook and add a worksheet
@@ -1049,7 +1150,7 @@ def fetch_data():
                 ws.merge_cells(start_row=start_row, start_column=1, end_row=start_row, end_column=total_cols)
                 title_cell = ws.cell(row=start_row, column=1)
                 title_cell.value = title
-                title_cell.font = Font(bold=True, size=12)
+                title_cell.font = Font(bold=True, size=10)
                 title_cell.alignment = Alignment(horizontal='center', vertical='center')
                 
                 start_row += 1
