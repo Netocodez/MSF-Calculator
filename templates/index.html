@@ -8,12 +8,12 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
-    <body>
     <button id="helpBtn" title="Help">?</button>
     <div id="helpBox" class="hidden">
         <h3>Help Guide</h3>
         <ul>
             <li><strong>Reporting Period</strong>: Select the current reporting period in review (e.g., 2025-05).</li>
+            <li><strong>MSF Report Type</strong>: Choose whether to process the standard MSF or the New MSF report.</li>
             <li><strong>Select one list at a time</strong>: Highly Recommended.</li>
             <li><strong>Current ART Line List</strong>: Required for processing MSF report.</li>
             <li><strong>Previous ART Line List</strong>: Optional, help to track status change better (Restart).</li>
@@ -21,10 +21,10 @@
             <li>Ensure all files are in .csv (recommended) .xlsx, or .xls format.</li>
             <li>Click "ART LINE LIST TO ART MSF" to generate report.</li>
             <br>
-            
-        <p>For any issues, contact <a href="mailto:netocodes@gmail.com">netocodes@gmail.com </a>or call +2348134453841</p>
+            <p>For any issues, contact <a href="mailto:netocodes@gmail.com">netocodes@gmail.com </a>or call +2348134453841</p>
         </ul>
     </div>
+    
     <div class="container">
         <h1>ANSO NMRS MSF REPORT GENERATOR</h1>
         <h2>Ensuring Real Time Quality and Consistent Data!</h2>
@@ -33,6 +33,14 @@
             <div class="form-group">
                 <label for="endDate"><p>Select Reporting Period:</p></label>
                 <input type="month" id="endDate" name="endDate">
+            </div>
+            
+            <div class="form-group">
+                <label for="msfType"><p>Select MSF Report Type:</p></label>
+                <select id="msfType" name="msfType" style="width: 100%; padding: 8px; border-radius: 4px;">
+                    <option value="standard">OLD ART MSF</option>
+                    <option value="new">New Revised_2025 ART MSF</option>
+                </select>
             </div>
         </div>
 
@@ -81,51 +89,53 @@
                 const file2 = fileInput2.files[0];
                 const file3 = fileInput3.files[0];
                 const endDate = $("#endDate").val();
+                
+                // Read the selected dropdown value
+                const msfType = $("#msfType").val();
 
                 if (!file1) {
-                    $("#message").text("Please select Current ART Line List Excel file.").addClass("errmessage");
+                    $("#message").text("Please select Current ART Line List Excel file.").attr('class', 'errmessage');
                     return;
                 }
 
                 const allowedExtensions = /(\.xlsx|\.xls|\.csv)$/i;
                 if (!allowedExtensions.exec(file1.name)) {
-                    $("#message").text("Current ART Line List must be an Excel file or csv (.xlsx, .xls or csv).").addClass("errmessage");
+                    $("#message").text("Current ART Line List must be an Excel file or csv (.xlsx, .xls or csv).").attr('class', 'errmessage');
                     return;
                 }
 
                 if (file2 && !allowedExtensions.exec(file2.name)) {
-                    $("#message").text("Baseline ART Line List must be an Excel file or csv (.xlsx, .xls or csv).").addClass("errmessage");
+                    $("#message").text("Baseline ART Line List must be an Excel file or csv (.xlsx, .xls or csv).").attr('class', 'errmessage');
                     return;
                 }
 
                 if (file3 && !allowedExtensions.exec(file3.name)) {
-                    $("#message").text("Radet must be an Excel file or csv (.xlsx, .xls or csv).").addClass("errmessage");
+                    $("#message").text("Radet must be an Excel file or csv (.xlsx, .xls or csv).").attr('class', 'errmessage');
                     return;
                 }
 
                 const formData = new FormData();
                 formData.append("file1", file1);
-                if (file2) {
-                    formData.append("file2", file2); // Only append if it exists
-                }
-                if (file3) {
-                    formData.append("file3", file3); // Only append if it exists
-                }
+                if (file2) formData.append("file2", file2);
+                if (file3) formData.append("file3", file3);
                 formData.append("endDate", endDate);
 
                 $("#loading").removeClass("hidden");
-                $("#message").text("");
+                $("#message").text("").removeClass("message errmessage");
                 $("#uploadMessage").text("");
 
+                // Determine target URL based on dropdown selection
+                const targetUrl = (msfType === "new") ? "/fetch_newmsf" : "/fetch";
+
                 $.ajax({
-                    url: "/fetch",
+                    url: targetUrl,
                     type: "POST",
                     data: formData,
                     processData: false,
                     contentType: false,
                     success: function (response) {
                         $("#loading").addClass("hidden");
-                        $("#message").text(response.message).addClass("message");
+                        $("#message").text(response.message).attr('class', 'message');
 
                         if (response.download_url) {
                             $("#downloadLinkgray")
@@ -137,15 +147,14 @@
                     },
                     error: function () {
                         $("#loading").addClass("hidden");
-                        $("#message").text("Error fetching and processing data.").addClass("errmessage");
+                        $("#message").text("Error fetching and processing data.").attr('class', 'errmessage');
                     }
                 });
             });
 
-        });
-
-                $("#helpBtn").click(function () {
-            $("#helpBox").toggleClass("hidden");
+            $("#helpBtn").click(function () {
+                $("#helpBox").toggleClass("hidden");
+            });
         });
     </script>
 </body>

@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, send_from_directory, url_for, abort
 
 import pandas as pd
 import numpy as np
@@ -7,17 +7,28 @@ import logging
 from datetime import datetime
 from dateutil import parser
 import xlsxwriter
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
+from werkzeug.utils import safe_join
 from openpyxl.styles import Font, Alignment, PatternFill
+
 #from utilities import process_emr_data
+import msf_common
 
 # Flask app
 app = Flask(__name__)
 
 # Configuration
-UPLOAD_FOLDER = 'uploads'
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
+DOWNLOAD_FOLDER = os.path.join(BASE_DIR, "downloads")
+
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
+
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+app.config["DOWNLOAD_FOLDER"] = DOWNLOAD_FOLDER
 
 ALLOWED_EXTENSIONS = {'.xlsx', '.xls', '.csv'}
 
@@ -29,7 +40,7 @@ columns_to_read = [
     'State', 'LGA', 'FacilityName', 'PatientHospitalNo', 'PEPID', 'uuid', 'ARTStatus_PreviousQuarter','CurrentARTStatus', 'DOB', 'ARTStartDate', 'DateConfirmedHIV+', 'Pharmacy_LastPickupdate',
     'DateResultReceivedFacility', 'Date_Transfered_In','Whostage','CurrentCD4','Current_CD4_LFA_Result','Serology_for_CrAg_Result','CSF_for_CrAg_Result',
     'CurrentPregnancyStatus', 'First_TPT_Pickupdate', 'Current_TPT_Received', 'Current_TB_Status', 'CurrentRegimenLine',
-    'DaysOfARVRefill', 'DSD_Model', 'Sex', 'Outcomes_Date', 'CurrentViralLoad', 'ViralLoadIndication', 'DateofCurrent_TBStatus'
+    'DaysOfARVRefill', 'DSD_Model', 'Sex', 'KPType', 'Outcomes_Date', 'CurrentViralLoad', 'ViralLoadIndication', 'DateofCurrent_TBStatus'
 ]
 
 b_columns_to_read = [
@@ -174,6 +185,9 @@ def home():
 
 @app.route('/fetch', methods=['POST'])
 def fetch_data():
+    
+    OLD_MSF_FOLDER = os.path.join(app.config["UPLOAD_FOLDER"], "old_msf")
+    os.makedirs(OLD_MSF_FOLDER, exist_ok=True)
     
     file1 = request.files.get("file1")
     file2 = request.files.get("file2")
@@ -1224,12 +1238,25 @@ def fetch_data():
             # Remove gridlines (this is done by hiding the gridlines in the sheet view)
             ws.sheet_view.showGridLines = False
 
-            # Save the workbook
-            wb.save(f"ART MSF SUMMARY AS AT {formatted_period}.xlsx")
+            old_msf_folder = os.path.join(
+                app.config["DOWNLOAD_FOLDER"],
+                "old_msf"
+            )
+            os.makedirs(old_msf_folder, exist_ok=True)
 
+            filename = f"ART MSF SUMMARY AS AT {formatted_period}.xlsx"
 
-            #return successful response
-            return jsonify({"message": "Data fetched and analyzed successfully!", "download_url": "/download"}), 200
+            output_path = os.path.join(old_msf_folder, filename)
+
+            wb.save(output_path)
+
+            return jsonify({
+                "message": "Old MSF generated successfully.",
+                "download_url": url_for(
+                    "download_file",
+                    filename=f"old_msf/{filename}"
+                )
+            }), 200
 
         except Exception as e:
             logging.exception("Error Formating and Exporting data")
@@ -1237,16 +1264,435 @@ def fetch_data():
 
     except Exception as e:
         return jsonify({"message": f"Error processing Excel file: {str(e)}"}), 500
+    
 
-@app.route('/download')
-def download_file():
+@app.route("/fetch_newmsf", methods=["POST"])
+def fetch_newmsf():
 
-    filename = f"ART MSF SUMMARY AS AT {formatted_period}.xlsx"
+    file1 = request.files.get("file1")
+    file2 = request.files.get("file2")
+    file3 = request.files.get("file3")
+    
+    if not file1 or not is_allowed_file(file1.filename):
+        return jsonify({"message": "Current ART Line List must be a CSV or Excel file."}), 400
 
-    if os.path.exists(filename):
-        return send_file(filename, as_attachment=True)
-    else:
-        return jsonify({"error": f"File {filename} not found"}), 404
+    if file2 and not is_allowed_file(file2.filename):
+        return jsonify({"message": "Baseline ART Line List must be a CSV or Excel file."}), 400
+    
+    if file3 and not is_allowed_file(file3.filename):
+        return jsonify({"message": "Baseline Lamis Radet must be a CSV or Excel file."}), 400
+
+    try:
+            # Load and clean current ART line list
+            df = load_file(file1, columns_to_read=columns_to_read)
+            #df = clean_dataframe(df)
+
+            # Merge baseline ART data if provided
+            if file2:
+                df_baseline = load_file(file2, columns_to_read=b_columns_to_read)
+                if 'uuid' in df.columns and 'uuid' in df_baseline.columns and 'CurrentARTStatus' in df_baseline.columns:
+                    df = df.merge(
+                        df_baseline[['uuid', 'CurrentARTStatus']],
+                        on='uuid', how='left', suffixes=('', '_baseline')
+                    )
+                    df['ARTStatus_PreviousQuarter'] = df['CurrentARTStatus_baseline']
+                    
+            if file3:
+                #emr_df = pd.read_excel(EMRfilename, sheet_name=0)
+                #emr_df = load_file(EMRfilename, columns_to_read=None)
+                dfbaselineRadet = load_file(file3, columns_to_read=r_columns_to_read)
+                df = process_emr_data(df, dfbaselineRadet, emr_df)
+                    
+            #df.to_excel('df.xlsx')
+            for col in DATE_COLUMNS:
+                if col in df.columns:
+                    df[col] = pd.to_datetime(df[col], errors='coerce', dayfirst=True)
+                    
+            for col in NUMERIC_COLUMNS:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+
+            # Read start and end dates from form data
+            end_date = request.form.get("endDate")
+
+            global formatted_period
+            if end_date:
+                end_date = pd.to_datetime(end_date)
+                formatted_period = end_date.to_period('M').strftime('%B %Y')
+                Period = end_date.to_period('M')  # Add this line
+
+            # Extract unique facility names as a list
+            unique_facilities = df['FacilityName'].unique()
+            facilities_text = ', '.join(unique_facilities)
+            print(facilities_text)
+            
+            #function to calculate current age and mirror excel datedif function
+            def calculate_age_vectorized(df, dob_col='DOB', ref_date=None):
+                # ✅ pick the reference date
+                if ref_date is None:
+                    today = pd.Timestamp.today().normalize()  # current day
+                else:
+                    today = pd.to_datetime(ref_date) + pd.offsets.MonthEnd(0)  # last day of month for given date
+
+                # ✅ fully vectorized age calculation
+                dob = df[dob_col]
+                age = (today.year - dob.dt.year 
+                    - ((dob.dt.month > today.month) | 
+                        ((dob.dt.month == today.month) & (dob.dt.day > today.day))).astype(int))
+
+                return age
+            
+            df['Age'] = calculate_age_vectorized(df, 'DOB', ref_date=end_date)
+            
+            df = msf_common.add_agebands(df)
+
+            last_year = (Period.to_timestamp() - pd.DateOffset(months=12)).to_period('M')
+            last_6mths = (Period.to_timestamp() - pd.DateOffset(months=6)).to_period('M')
+            
+            # Pregnancy
+            df["IsPregnant"] = (
+                df["CurrentPregnancyStatus"] == "Pregnant"
+            ).astype(int)
+
+            # Breastfeeding
+            df["IsBreastfeeding"] = (
+                df["CurrentPregnancyStatus"] == "Breastfeeding"
+            ).astype(int)
+
+            # TB
+            df["OnTB"] = (
+                df["Current_TB_Status"] == "On treatment for disease"
+            ).astype(int)
+
+            # Regimen Lines
+            df["IsFirstLine"] = df["CurrentRegimenLine"].isin([
+                "Adult 1st line ARV regimen",
+                "Child 1st line ARV regimen"
+            ]).astype(int)
+
+            df["IsSecondLine"] = df["CurrentRegimenLine"].isin([
+                "Adult 2nd line ARV regimen",
+                "Child 2nd line ARV regimen"
+            ]).astype(int)
+
+            df["IsThirdLine"] = df["CurrentRegimenLine"].isin([
+                "Adult 3rd Line ARV Regimens",
+                "Child 3rd line ARV regimen"
+            ]).astype(int)
+
+            # DSD
+            df["IsFacilityModel"] = (
+                df["DSD_Model"] == "Facility Dispensing"
+            ).astype(int)
+
+            df["IsCommunityModel"] = (
+                df["DSD_Model"] == "Decentralized Drug Delivery (DDD)"
+            ).astype(int)
+            
+            df_active = df[df["CurrentARTStatus"] == "Active"].copy()
+            #df_active.to_excel('df_active.xlsx')
+
+            df_new = df[
+                (df["ARTStartDate"].dt.to_period("M") == Period) &
+                (df["CurrentARTStatus"] == "Active")
+            ].copy()
+
+            df_losses = df[
+                df["CurrentARTStatus"].isin([
+                    "Death",
+                    "Transferred out",
+                    "LTFU",
+                    "Discontinued Care"
+                ])
+            ].copy()
+            
+            def summary_by_age(df_source, value_column):
+                pt = df_source.pivot_table(
+                    index="Sex",
+                    columns="Age Band New",
+                    values=value_column,
+                    aggfunc="sum",
+                    fill_value=0,
+                    observed=False
+                )
+
+                return msf_common.standardize_pivot(
+                    pt,
+                    msf_common.NEW_AGE_BANDS
+                )
+                
+            df_new["ART1"] = 1
+
+            ART1Summary = summary_by_age(
+                df_new,
+                "ART1"
+            )
+            
+            # ART2 - First Line
+            df_active_first = df_active[df_active["IsFirstLine"] == 1].copy()
+            df_active_first["ART2"] = 1
+
+            ART2FirstLineSummary = summary_by_age(
+                df_active_first,
+                "ART2"
+            )
+
+            # ART2 - Second Line
+            df_active_second = df_active[df_active["IsSecondLine"] == 1].copy()
+            df_active_second["ART2"] = 1
+
+            ART2SecondLineSummary = summary_by_age(
+                df_active_second,
+                "ART2"
+            )
+
+            # ART2 - Third Line
+            df_active_third = df_active[df_active["IsThirdLine"] == 1].copy()
+            df_active_third["ART2"] = 1
+
+            ART2ThirdLineSummary = summary_by_age(
+                df_active_third,
+                "ART2"
+            )
+            
+            # ==========================================================
+            # CREATE NEW MSF WORKBOOK
+            # ==========================================================
+
+            # Helper
+            def get_value(table, sex, age):
+                try:
+                    return int(table.loc[sex, age])
+                except Exception:
+                    return 0
+
+            # Create output folder if it doesn't exist
+            new_msf_folder = os.path.join(app.config["UPLOAD_FOLDER"], "new_msf")
+            os.makedirs(new_msf_folder, exist_ok=True)
+
+            # ------------------------------------------------------------------
+            # Load template
+            # ------------------------------------------------------------------
+            template_path = os.path.join(
+                app.root_path,
+                "templates",
+                "New_MSF.xlsx"      # change if your template has another name
+            )
+
+            wb = load_workbook(template_path)
+
+            ws = wb.active
+
+            # ------------------------------------------------------------------
+            # Header
+            # ------------------------------------------------------------------
+            # Merge header cells
+            ws.merge_cells("A1:M1")
+
+            # Set header text
+            ws["A1"] = (
+                f"{facilities_text} - {formatted_period} "
+                f"(Generated: {datetime.now():%d-%b-%Y %H:%M})"
+            )
+
+            # Format the header
+            ws["A1"].font = Font(
+                bold=True,
+                size=14,
+                color="FFFFFFFF"   # White
+            )
+
+            ws["A1"].alignment = Alignment(
+                horizontal="center",
+                vertical="center"
+            )
+
+            # ------------------------------------------------------------------
+            # Temporary statistics
+            # ------------------------------------------------------------------
+            ART1_MAP = {
+                ("Male", "<1"): "C4",
+                ("Male", "1-4"): "D4",
+                ("Male", "5-9"): "E4",
+                ("Male", "10-14"): "F4",
+                ("Male", "15-19"): "G4",
+                ("Male", "20-24"): "H4",
+                ("Male", "25-49"): "I4",
+                ("Male", "50+"): "J4",
+
+                ("Female", "<1"): "C5",
+                ("Female", "1-4"): "D5",
+                ("Female", "5-9"): "E5",
+                ("Female", "10-14"): "F5",
+                ("Female", "15-19"): "G5",
+                ("Female", "20-24"): "H5",
+                ("Female", "25-49"): "I5",
+                ("Female", "50+"): "J5"
+            }
+            
+            ART2_FIRST_LINE = {
+                ("Male", "<1"): "C13",
+                ("Male", "1-4"): "D13",
+                ("Male", "5-9"): "E13",
+                ("Male", "10-14"): "F13",
+                ("Male", "15-19"): "G13",
+                ("Male", "20-24"): "H13",
+                ("Male", "25-49"): "I13",
+                ("Male", "50+"): "J13",
+
+                ("Female", "<1"): "C14",
+                ("Female", "1-4"): "D14",
+                ("Female", "5-9"): "E14",
+                ("Female", "10-14"): "F14",
+                ("Female", "15-19"): "G14",
+                ("Female", "20-24"): "H14",
+                ("Female", "25-49"): "I14",
+                ("Female", "50+"): "J14"
+            }
+            
+            ART2_SECOND_LINE = {
+                ("Male", "<1"): "C17",
+                ("Male", "1-4"): "D17",
+                ("Male", "5-9"): "E17",
+                ("Male", "10-14"): "F17",
+                ("Male", "15-19"): "G17",
+                ("Male", "20-24"): "H17",
+                ("Male", "25-49"): "I17",
+                ("Male", "50+"): "J17",
+
+                ("Female", "<1"): "C18",
+                ("Female", "1-4"): "D18",
+                ("Female", "5-9"): "E18",
+                ("Female", "10-14"): "F18",
+                ("Female", "15-19"): "G18",
+                ("Female", "20-24"): "H18",
+                ("Female", "25-49"): "I18",
+                ("Female", "50+"): "J18"
+            }
+            
+            ART2_THIRD_LINE = {
+                ("Male", "<1"): "C21",
+                ("Male", "1-4"): "D21",
+                ("Male", "5-9"): "E21",
+                ("Male", "10-14"): "F21",
+                ("Male", "15-19"): "G21",
+                ("Male", "20-24"): "H21",
+                ("Male", "25-49"): "I21",
+                ("Male", "50+"): "J21",
+
+                ("Female", "<1"): "C22",
+                ("Female", "1-4"): "D22",
+                ("Female", "5-9"): "E22",
+                ("Female", "10-14"): "F22",
+                ("Female", "15-19"): "G22",
+                ("Female", "20-24"): "H22",
+                ("Female", "25-49"): "I22",
+                ("Female", "50+"): "J22"
+            }
+            
+            def write_summary(ws, summary, cell_map):
+                for (sex, age), cell in cell_map.items():
+                    ws[cell] = get_value(summary, sex, age)
+                    
+            write_summary(ws, ART1Summary, ART1_MAP)
+            write_summary(ws, ART2FirstLineSummary, ART2_FIRST_LINE)
+            write_summary(ws, ART2SecondLineSummary, ART2_SECOND_LINE)
+            write_summary(ws, ART2ThirdLineSummary, ART2_THIRD_LINE)
+            
+            def category_summary(df_source, column, value):
+                temp = df_source[df_source[column] == value].copy()
+                temp["Count"] = 1
+                return summary_by_age(temp, "Count")
+            
+            ART1MSMSummary = category_summary(df_new, "KPType", "Male who has sex with men")
+            ART1FSWSummary = category_summary(df_new, "KPType", "FSW")
+            ART1PWIDSummary = category_summary(df_new, "KPType", "PWID")
+            ART1TGSummary = category_summary(df_new, "KPType", "Transgender")
+            ART1PrisonSummary = category_summary(df_new, "KPType", "In prison")
+            
+            ws["C8"] = int(ART1MSMSummary.to_numpy().sum())
+            ws["D8"] = int(ART1FSWSummary.to_numpy().sum())
+            ws["E8"] = int(ART1PWIDSummary.to_numpy().sum())
+            ws["F8"] = int(ART1TGSummary.to_numpy().sum())
+            ws["G8"] = int(ART1PrisonSummary.to_numpy().sum())
+            
+            ART2MSMSummary = category_summary(df_active, "KPType", "Male who has sex with men")
+            ART2FSWSummary = category_summary(df_active, "KPType", "FSW")
+            ART2PWIDSummary = category_summary(df_active, "KPType", "PWID")
+            ART2TGSummary = category_summary(df_active, "KPType", "Transgender")
+            ART2PrisonSummary = category_summary(df_active, "KPType", "In prison")
+            
+            ws["K10"] = df_active.shape[0]
+            
+            ws["C25"] = int(ART2MSMSummary.to_numpy().sum())
+            ws["D25"] = int(ART2FSWSummary.to_numpy().sum())
+            ws["E25"] = int(ART2PWIDSummary.to_numpy().sum())
+            ws["F25"] = int(ART2TGSummary.to_numpy().sum())
+            ws["G25"] = int(ART2PrisonSummary.to_numpy().sum())
+            
+            # ART2 - MMD <3 Months
+            ws["C27"] = (df_active["DaysOfARVRefill"] < 90).sum()
+
+            ws["E27"] = (
+                (df_active["DaysOfARVRefill"] >= 90) &
+                (df_active["DaysOfARVRefill"] < 180)
+            ).sum()
+
+            ws["H27"] = (df_active["DaysOfARVRefill"] >= 180).sum()
+
+            
+            # ------------------------------------------------------------------
+            # Save workbook
+            # ------------------------------------------------------------------
+            safe_facility = facilities_text.replace("/", "-")
+
+            new_msf_folder = os.path.join(
+                app.config["DOWNLOAD_FOLDER"],
+                "new_msf"
+            )
+            os.makedirs(new_msf_folder, exist_ok=True)
+
+            filename = (
+                f"{safe_facility}_NEW_MSF_"
+                f"{formatted_period.replace(' ', '_')}.xlsx"
+            )
+
+            # Or, if you prefer a timestamped filename instead:
+            # filename = f"ART_MSF_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
+
+            output_path = os.path.join(
+                new_msf_folder,
+                filename
+            )
+
+            wb.save(output_path)
+
+            return jsonify({
+                "message": "New MSF generated successfully.",
+                "download_url": url_for(
+                    "download_file",
+                    filename=f"new_msf/{filename}"
+                )
+            }), 200
+            
+    except Exception as e:
+        logging.exception("Error Processing Data")
+        return jsonify({'error': str(e)}), 500  
+
+@app.route("/download/<path:filename>")
+def download_file(filename):
+    download_root = app.config["DOWNLOAD_FOLDER"]
+
+    file_path = safe_join(download_root, filename)
+
+    if file_path is None or not os.path.isfile(file_path):
+        abort(404, description="File not found")
+
+    return send_from_directory(
+        download_root,
+        filename,
+        as_attachment=True
+    )
 
 if __name__ == '__main__':
     app.run(debug=True)
