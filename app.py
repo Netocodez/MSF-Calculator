@@ -1397,6 +1397,58 @@ def fetch_new_msf():
             (df["ARTStartDate"].dt.to_period("M") == Period) &
             (df["CurrentARTStatus"] == "Active")
         ].copy()
+        
+        
+        # ===========================
+        # Losses
+        # ===========================
+        df['Pharmacy_LastPickupdate2'] = pd.to_datetime(
+            df['Pharmacy_LastPickupdate'], errors='coerce'
+        ).fillna(pd.to_datetime('1900-01-01'))
+
+        df['DaysOfARVRefill2'] = df['DaysOfARVRefill'].apply(
+            lambda x: 0 if pd.notna(x) and x > 180 else x
+        )
+
+        df['NextAppt'] = (
+            df['Pharmacy_LastPickupdate2'] +
+            pd.to_timedelta(df['DaysOfARVRefill2'].fillna(0), unit='D')
+        )
+
+        df['IITDate2'] = df['NextAppt'] + pd.Timedelta(days=29)
+
+        df['Losses date'] = df['Outcomes_Date'].fillna(df['IITDate2'])
+        df['Losses date'] = pd.to_datetime(df['Losses date'], errors='coerce')
+
+        df_Losses = df[
+            df['CurrentARTStatus'].isin([
+                "Death",
+                "Transferred out",
+                "LTFU",
+                "Discontinued Care"
+            ]) &
+            (df['Losses date'].dt.to_period('M') == Period)
+        ].copy()
+
+        df_Losses["Stopped"] = (df_Losses["CurrentARTStatus"] == "Discontinued Care").astype(int)
+        df_Losses["LTFU"] = (df_Losses["CurrentARTStatus"] == "LTFU").astype(int)
+        df_Losses["Dead"] = (df_Losses["CurrentARTStatus"] == "Death").astype(int)
+        df_Losses["Transferred"] = (df_Losses["CurrentARTStatus"] == "Transferred out").astype(int)
+        
+        df['ARTStartDate'] = pd.to_datetime(df['ARTStartDate'], errors='coerce')
+
+        df_Restart = df[
+            (df['CurrentARTStatus'] == "Active") &
+            (df['ARTStartDate'].dt.to_period('M') != Period)
+        ].copy()
+
+        df_Restart['Restart'] = np.where(
+            (df_Restart['ARTStatus_PreviousQuarter'].notna()) &
+            (df_Restart['ARTStatus_PreviousQuarter'] != "Active") &
+            (df_Restart['Date_Transfered_In'].dt.to_period('M') != Period),
+            1,
+            0
+        )
 
         # --- Phase 5: Generating Summaries & Excel Writing ---
         template_path = os.path.join(app.root_path, "templates", "New_MSF.xlsx")
@@ -1457,6 +1509,19 @@ def fetch_new_msf():
 
         ws["C43"], ws["D43"], ws["E43"] = count_kp(df_VL_Sup, "Male who has sex with men"), count_kp(df_VL_Sup, "FSW"), count_kp(df_VL_Sup, "PWID")
         ws["F43"], ws["G43"] = count_kp(df_VL_Sup, "Transgender"), count_kp(df_VL_Sup, "In prison")
+        
+        #ART 5
+        ws["C46"] = (df_Losses["CurrentARTStatus"] == "Discontinued Care").sum()
+        ws["F46"] = (df_Losses["CurrentARTStatus"] == "LTFU").sum()
+        ws["I46"] = (df_Losses["CurrentARTStatus"] == "Death").sum()
+        ws["K49"] = (df_Losses["CurrentARTStatus"] == "Transferred out").sum()
+        
+        #Restart and Transfer In
+        ws["K48"] = df_Restart["Restart"].sum()
+        ws["K50"] = (
+            (df["CurrentARTStatus"] == "Active") &
+            (df["Date_Transfered_In"].dt.to_period("M") == Period)
+        ).sum()
 
         # --- Phase 7: Save File Output ---
         safe_facility = facilities_text.replace("/", "-")
