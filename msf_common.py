@@ -20,6 +20,8 @@ NEW_AGE_BANDS = [
     "50+"
 ]
 
+THREE_AGE_BANDS = ["<5", "5-14", "15+"]
+
 
 OLD_BINS = [
     -np.inf,1,4,9,14,19,24,29,
@@ -38,6 +40,11 @@ NEW_BINS = [
     np.inf
 ]
 
+THREE_BINS = [-np.inf, 4, 14, np.inf]
+
+MSF_COLUMNS = ["C","D","E","F","G","H","I","J"]
+THREE_AGE_COLUMNS = ["C","D","E","F","G","H"]
+
 
 def add_agebands(df):
 
@@ -54,6 +61,13 @@ def add_agebands(df):
         labels=NEW_AGE_BANDS,
         right=True
     )
+    
+    df["Age Band 3"] = pd.cut(
+        df["Age"],
+        bins=THREE_BINS,
+        labels=THREE_AGE_BANDS,
+        right=True
+    )
 
     return df
 
@@ -61,14 +75,15 @@ def add_agebands(df):
 def standardize_pivot(df, bands):
 
     df = df.reindex(columns=bands, fill_value=0)
-    df = df.reindex(["M","F"], fill_value=0)
-    df.rename(
+
+    df = df.rename(
         index={
-            "M":"Male",
-            "F":"Female"
-        },
-        inplace=True
+            "M": "Male",
+            "F": "Female"
+        }
     )
+
+    df = df.reindex(["Male", "Female"], fill_value=0)
 
     df["Total"] = df.sum(axis=1)
 

@@ -40,7 +40,8 @@ columns_to_read = [
     'State', 'LGA', 'FacilityName', 'PatientHospitalNo', 'PEPID', 'uuid', 'ARTStatus_PreviousQuarter','CurrentARTStatus', 'DOB', 'ARTStartDate', 'DateConfirmedHIV+', 'Pharmacy_LastPickupdate',
     'DateResultReceivedFacility', 'Date_Transfered_In','Whostage','CurrentCD4','Current_CD4_LFA_Result','Serology_for_CrAg_Result','CSF_for_CrAg_Result',
     'CurrentPregnancyStatus', 'First_TPT_Pickupdate', 'Current_TPT_Received', 'Current_TB_Status', 'CurrentRegimenLine',
-    'DaysOfARVRefill', 'DSD_Model', 'Sex', 'KPType', 'Outcomes_Date', 'CurrentViralLoad', 'ViralLoadIndication', 'DateofCurrent_TBStatus'
+    'DaysOfARVRefill', 'DSD_Model', 'Sex', 'KPType', 'Outcomes_Date', 'CurrentViralLoad', 'ViralLoadIndication', 'DateofCurrent_TBStatus', 'DateofCurrent_TBStatus', 'TB_Treatment_Start_Date', 
+    'Other_Test_(TB-LAM_LF-LAM_etc)', 'Sputum_AFB_Result', 'GeneXpert_Result', 'Chest_Xray_Result', 'Culture_Result'
 ]
 
 b_columns_to_read = [
@@ -54,7 +55,7 @@ r_columns_to_read = [
 # Columns
 DATE_COLUMNS = [
     'DOB', 'ARTStartDate','DateConfirmedHIV+', 'Pharmacy_LastPickupdate',
-    'DateResultReceivedFacility', 'Date_Transfered_In', 'Outcomes_Date', 'DateofCurrent_TBStatus', 'First_TPT_Pickupdate'
+    'DateResultReceivedFacility', 'Date_Transfered_In', 'Outcomes_Date', 'DateofCurrent_TBStatus', 'TB_Treatment_Start_Date', 'First_TPT_Pickupdate'
 ]
 
 NUMERIC_COLUMNS = [
@@ -1309,40 +1310,59 @@ def calculate_age_bands(df, end_date):
     return df
 
 
-def get_age_summary(df_source, value_column):
-    """Your exact template-matching pivot table function."""
+def get_age_summary(df_source, value_column, age_column="Age Band New", age_bands=None):
+    """
+    Generic pivot table for any age-band column.
+    """
+
     pt = df_source.pivot_table(
         index="Sex",
-        columns="Age Band New",
+        columns=age_column,
         values=value_column,
         aggfunc="sum",
         fill_value=0,
         observed=False
     )
-    return msf_common.standardize_pivot(pt, msf_common.NEW_AGE_BANDS)
+
+    if age_bands is None:
+        age_bands = msf_common.NEW_AGE_BANDS
+
+    return msf_common.standardize_pivot(pt, age_bands)
 
 
-def write_grid_to_excel(ws, summary_table, start_row):
+def write_summary_to_excel(
+    ws,
+    summary_table,
+    start_row,
+    columns,
+    age_bands,
+    female_same_row=False
+):
     """
-    Fills out a standard 2-row grid (Male and Female) across columns C to J.
-    Instead of hardcoding 16 cells for every section, it uses a simple loop!
+    Generic writer for age/sex summaries.
+
+    female_same_row=False
+        Male -> start_row
+        Female -> start_row+1
+
+    female_same_row=True
+        Male and Female on same row
     """
-    columns = ["C", "D", "E", "F", "G", "H", "I", "J"]
-    age_bands = ["<1", "1-4", "5-9", "10-14", "15-19", "20-24", "25-49", "50+"]
-    
-    for col_letter, age in zip(columns, age_bands):
-        # Write Male row
-        try:
-            ws[f"{col_letter}{start_row}"] = int(summary_table.loc["Male", age])
-        except Exception:
-            ws[f"{col_letter}{start_row}"] = 0
+
+    if female_same_row:
+
+        for col, age in zip(columns[:len(age_bands)], age_bands):
+            ws[f"{col}{start_row}"] = int(summary_table.loc["Male", age])
+
+        for col, age in zip(columns[len(age_bands):], age_bands):
+            ws[f"{col}{start_row}"] = int(summary_table.loc["Female", age])
+
+    else:
+
+        for col, age in zip(columns, age_bands):
+            ws[f"{col}{start_row}"] = int(summary_table.loc["Male", age])
+            ws[f"{col}{start_row+1}"] = int(summary_table.loc["Female", age])
             
-        # Write Female row (1 row right below Male)
-        try:
-            ws[f"{col_letter}{start_row + 1}"] = int(summary_table.loc["Female", age])
-        except Exception:
-            ws[f"{col_letter}{start_row + 1}"] = 0
-
 
 # ==============================================================================
 # 2. THE CLEAN FLASK ROUTE
@@ -1463,12 +1483,12 @@ def fetch_new_msf():
 
         # Write Age/Sex Grid Summaries using our simple row-helper
         df_new["ART1"] = 1
-        write_grid_to_excel(ws, get_age_summary(df_new, "ART1"), start_row=4)
+        write_summary_to_excel(ws, get_age_summary(df_new, "ART1"), start_row=4, columns=msf_common.MSF_COLUMNS, age_bands=msf_common.NEW_AGE_BANDS)
         
         df_active["ART2"] = 1
-        write_grid_to_excel(ws, get_age_summary(df_active[df_active["IsFirstLine"] == 1], "ART2"), start_row=13)
-        write_grid_to_excel(ws, get_age_summary(df_active[df_active["IsSecondLine"] == 1], "ART2"), start_row=17)
-        write_grid_to_excel(ws, get_age_summary(df_active[df_active["IsThirdLine"] == 1], "ART2"), start_row=21)
+        write_summary_to_excel(ws, get_age_summary(df_active[df_active["IsFirstLine"] == 1], "ART2"), start_row=13, columns=msf_common.MSF_COLUMNS, age_bands=msf_common.NEW_AGE_BANDS)
+        write_summary_to_excel(ws, get_age_summary(df_active[df_active["IsSecondLine"] == 1], "ART2"), start_row=17, columns=msf_common.MSF_COLUMNS, age_bands=msf_common.NEW_AGE_BANDS)
+        write_summary_to_excel(ws, get_age_summary(df_active[df_active["IsThirdLine"] == 1], "ART2"), start_row=21, columns=msf_common.MSF_COLUMNS, age_bands=msf_common.NEW_AGE_BANDS)
 
         # Viral Load Queries (ART3 & ART4)
         last_year = (Period.to_timestamp() - pd.DateOffset(months=12)).to_period('M')
@@ -1479,11 +1499,190 @@ def fetch_new_msf():
             (df_active['ARTStartDate'].dt.to_period('M') <= last_6mths)
         ].copy()
         df_VL["ART3"] = 1
-        write_grid_to_excel(ws, get_age_summary(df_VL, "ART3"), start_row=31)
+        write_summary_to_excel(ws, get_age_summary(df_VL, "ART3"), start_row=31, columns=msf_common.MSF_COLUMNS, age_bands=msf_common.NEW_AGE_BANDS)
 
         df_VL_Sup = df_VL[df_VL['CurrentViralLoad'] < 1000].copy()
         df_VL_Sup["ART4"] = 1
-        write_grid_to_excel(ws, get_age_summary(df_VL_Sup, "ART4"), start_row=39)
+        write_summary_to_excel(ws, get_age_summary(df_VL_Sup, "ART4"), start_row=39, columns=msf_common.MSF_COLUMNS, age_bands=msf_common.NEW_AGE_BANDS)
+        
+        
+        # ==============================================================================
+        # TB Cascade
+        # ==============================================================================
+
+        df_TB_Screening = df[
+            (df["DateofCurrent_TBStatus"].dt.to_period("M") == Period) &
+            (df["CurrentARTStatus"] == "Active")
+        ].copy()
+
+        # ART10: Number of PLHIV on ART who were clinically screened for TB
+        df_TB_Screening["ART10"] = 1
+
+        write_summary_to_excel(
+            ws,
+            get_age_summary(
+                df_TB_Screening,
+                "ART10",
+                age_column="Age Band 3",
+                age_bands=msf_common.THREE_AGE_BANDS
+            ),
+            start_row=55,
+            columns=msf_common.THREE_AGE_COLUMNS,
+            age_bands=msf_common.THREE_AGE_BANDS,
+            female_same_row=True
+        )
+
+        # ------------------------------------------------------------------------------
+        # Common boolean variables used throughout the cascade
+        # ------------------------------------------------------------------------------
+
+        # Disease suspected
+        suspected_tb = (
+            df_TB_Screening["Current_TB_Status"]
+            .fillna("")
+            .str.strip()
+            .eq("Disease suspected")
+        )
+
+        # TB test result columns
+        tb_test_columns = [
+            "Other_Test_(TB-LAM_LF-LAM_etc)",
+            "Sputum_AFB_Result",
+            "GeneXpert_Result",
+            "Chest_Xray_Result",
+            "Culture_Result"
+        ]
+
+        # Any TB test documented
+        tb_test_done = (
+            df_TB_Screening[tb_test_columns]
+                .fillna("")
+                .astype(str)
+                .apply(lambda x: x.str.strip())
+                .ne("")
+                .any(axis=1)
+        )
+
+        # Positive TB test values
+        tb_positive_values = {
+            "Other_Test_(TB-LAM_LF-LAM_etc)": "POSITIVE",
+            "Sputum_AFB_Result": "POSITIVE",
+            "GeneXpert_Result": "MTB DETECTED",
+            "Chest_Xray_Result": "SUGGESTIVE",
+            "Culture_Result": "POSITIVE"
+        }
+
+        # Any documented positive TB test
+        tb_test_positive = pd.DataFrame({
+            c: (
+                df_TB_Screening[c]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip()
+                    .str.upper()
+                    .eq(tb_positive_values[c])
+            )
+            for c in tb_test_columns
+        }).any(axis=1)
+
+        # Started TB treatment during reporting period
+        tb_treatment_started = (
+            df_TB_Screening["TB_Treatment_Start_Date"]
+                .dt.to_period("M")
+                .eq(Period)
+        )
+
+        # ------------------------------------------------------------------------------
+        # ART11: Disease suspected
+        # ------------------------------------------------------------------------------
+
+        df_TB_Screening["ART11"] = suspected_tb.astype(int)
+
+        write_summary_to_excel(
+            ws,
+            get_age_summary(
+                df_TB_Screening,
+                "ART11",
+                age_column="Age Band 3",
+                age_bands=msf_common.THREE_AGE_BANDS
+            ),
+            start_row=56,
+            columns=msf_common.THREE_AGE_COLUMNS,
+            age_bands=msf_common.THREE_AGE_BANDS,
+            female_same_row=True
+        )
+
+        # ------------------------------------------------------------------------------
+        # ART12: Disease suspected and tested for TB
+        # ------------------------------------------------------------------------------
+
+        df_TB_Screening["ART12"] = (
+            suspected_tb &
+            tb_test_done
+        ).astype(int)
+
+        write_summary_to_excel(
+            ws,
+            get_age_summary(
+                df_TB_Screening,
+                "ART12",
+                age_column="Age Band 3",
+                age_bands=msf_common.THREE_AGE_BANDS
+            ),
+            start_row=57,
+            columns=msf_common.THREE_AGE_COLUMNS,
+            age_bands=msf_common.THREE_AGE_BANDS,
+            female_same_row=True
+        )
+
+        # ------------------------------------------------------------------------------
+        # ART13: Disease suspected, tested and positive
+        # ------------------------------------------------------------------------------
+
+        df_TB_Screening["ART13"] = (
+            suspected_tb &
+            tb_test_done &
+            tb_test_positive
+        ).astype(int)
+
+        write_summary_to_excel(
+            ws,
+            get_age_summary(
+                df_TB_Screening,
+                "ART13",
+                age_column="Age Band 3",
+                age_bands=msf_common.THREE_AGE_BANDS
+            ),
+            start_row=58,
+            columns=msf_common.THREE_AGE_COLUMNS,
+            age_bands=msf_common.THREE_AGE_BANDS,
+            female_same_row=True
+        )
+
+        # ------------------------------------------------------------------------------
+        # ART14: Disease suspected, tested, positive and started TB treatment
+        # ------------------------------------------------------------------------------
+
+        df_TB_Screening["ART14"] = (
+            suspected_tb &
+            tb_test_done &
+            tb_test_positive &
+            tb_treatment_started
+        ).astype(int)
+
+        write_summary_to_excel(
+            ws,
+            get_age_summary(
+                df_TB_Screening,
+                "ART14",
+                age_column="Age Band 3",
+                age_bands=msf_common.THREE_AGE_BANDS
+            ),
+            start_row=59,
+            columns=msf_common.THREE_AGE_COLUMNS,
+            age_bands=msf_common.THREE_AGE_BANDS,
+            female_same_row=True
+        )
 
         # --- Phase 6: KPI Population Counts ---
         # Simple local helper function to count specific categories to save space
