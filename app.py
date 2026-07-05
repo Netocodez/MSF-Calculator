@@ -1515,7 +1515,7 @@ def fetch_new_msf():
             (df["CurrentARTStatus"] == "Active")
         ].copy()
 
-        # ART10: Number of PLHIV on ART who were clinically screened for TB
+        # ART10: Number of people living with HIV on ART (Including PMTCT) who were Clinically Screened for TB in HIV Treatment Settings 
         df_TB_Screening["ART10"] = 1
 
         write_summary_to_excel(
@@ -1593,7 +1593,7 @@ def fetch_new_msf():
         )
 
         # ------------------------------------------------------------------------------
-        # ART11: Disease suspected
+        # ART11: Number of people living with HIV on ART with Presumptive TB during the month
         # ------------------------------------------------------------------------------
 
         df_TB_Screening["ART11"] = suspected_tb.astype(int)
@@ -1613,7 +1613,7 @@ def fetch_new_msf():
         )
 
         # ------------------------------------------------------------------------------
-        # ART12: Disease suspected and tested for TB
+        # ART12: Number of people living with HIV on ART with Presumptive TB who were tested for TB during the month
         # ------------------------------------------------------------------------------
 
         df_TB_Screening["ART12"] = (
@@ -1636,7 +1636,7 @@ def fetch_new_msf():
         )
 
         # ------------------------------------------------------------------------------
-        # ART13: Disease suspected, tested and positive
+        # ART13: Number of people living with HIV on ART who have Active TB Disease
         # ------------------------------------------------------------------------------
 
         df_TB_Screening["ART13"] = (
