@@ -1414,8 +1414,7 @@ def fetch_new_msf():
         df_active = df[df["CurrentARTStatus"] == "Active"].copy()
         
         df_new = df[
-            (df["ARTStartDate"].dt.to_period("M") == Period) &
-            (df["CurrentARTStatus"] == "Active")
+            (df["ARTStartDate"].dt.to_period("M") == Period)
         ].copy()
         
         
